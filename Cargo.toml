@@ -1,0 +1,19 @@
+[package]
+name = "h3arrow"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+geoarrow = ["dep:geoarrow"]
+rayon = ["dep:rayon"]
+
+[dependencies]
+ahash = "0.8"
+arrow2 = { version = "0.16", features = [] }
+geo = "0.23"
+geoarrow = { git = "https://github.com/geopolars/geoarrow", rev = "ff1f840", optional = true }
+geo-types = "0.7"
+h3o = { version = "0.3", features = ["geo"] }
+rayon = { version = "1", optional = true }
+thiserror = "1"
