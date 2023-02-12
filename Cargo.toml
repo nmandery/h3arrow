@@ -2,8 +2,16 @@
 name = "h3arrow"
 version = "0.1.0"
 edition = "2021"
+authors = ["Nico Mandery <nico@nmandery.net>"]
+license = "MIT"
+keywords = ["geo", "spatial", "h3"]
+readme = "README.md"
+homepage = "https://github.com/nmandery/h3arrow"
+repository = "https://github.com/nmandery/h3arrow"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 geoarrow = ["dep:geoarrow"]
 rayon = ["dep:rayon"]
