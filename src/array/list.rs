@@ -71,6 +71,25 @@ impl<A> From<H3ListArray<A>> for ListArray<i64> {
     }
 }
 
+impl<A> TryFrom<ListArray<i64>> for H3ListArray<A>
+where
+    A: H3Array + TryFrom<PrimitiveArray<u64>, Error = Error>,
+{
+    type Error = Error;
+
+    fn try_from(value: ListArray<i64>) -> Result<Self, Self::Error> {
+        let instance = Self {
+            list_array: value,
+            array_phantom: PhantomData::<A>::default(),
+        };
+
+        for a in instance.iter_arrays().flatten() {
+            let _ = a?;
+        }
+        Ok(instance)
+    }
+}
+
 pub trait IterU64 {
     type IndexType;
     type Iter: Iterator<Item = u64>;
