@@ -1,104 +1,93 @@
-use crate::array::CellIndexArray;
+use crate::array::H3Array;
 use crate::error::Error;
 use arrow2::array::{Array, ListArray, PrimitiveArray};
 use arrow2::datatypes::DataType;
-use std::vec::IntoIter;
+use std::marker::PhantomData;
 
-pub type H3ListArray = ListArray<i64>;
-
-pub(crate) fn transform_iter_to_listarray<I, T, F, I2>(
-    iter: I,
-    transform: F,
-) -> Result<H3ListArray, Error>
-where
-    I: Iterator<Item = Option<T>>,
-    u64: From<T>,
-    F: Fn(T) -> Result<I2, Error>,
-    I2: Iterator<Item = T>,
-{
-    let mut values = vec![];
-    let mut offsets = vec![];
-
-    for cell in iter {
-        offsets.push(values.len() as i64);
-        if let Some(cell) = cell {
-            values.extend(transform(cell)?.map(u64::from));
-        }
-    }
-    offsets.push(values.len() as i64);
-
-    H3ListArray::try_new(
-        H3ListArray::default_datatype(DataType::UInt64),
-        offsets.try_into()?,
-        PrimitiveArray::from_vec(values).to_boxed(),
-        None,
-    )
-    .map_err(Error::from)
+pub struct H3ListArray<A> {
+    list_array: ListArray<i64>,
+    array_phantom: PhantomData<A>,
 }
 
-pub(crate) trait IterU64 {
+impl<A> H3ListArray<A>
+where
+    A: H3Array + TryFrom<PrimitiveArray<u64>, Error = Error>,
+{
+    pub fn into_inner(self) -> ListArray<i64> {
+        self.list_array
+    }
+
+    pub fn len(&self) -> usize {
+        self.list_array.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.list_array.is_empty()
+    }
+
+    pub fn try_from_iter<I1, I2>(iter: I1) -> Result<Self, Error>
+    where
+        I1: Iterator<Item = Option<I2>>,
+        I2: IterU64<IndexType = A::Index>,
+    {
+        let mut values = vec![];
+        let mut offsets = vec![];
+
+        for vc in iter {
+            offsets.push(values.len() as i64);
+            if let Some(vc) = vc {
+                values.extend(vc.iter_u64());
+            }
+        }
+        offsets.push(values.len() as i64);
+
+        Ok(Self {
+            list_array: ListArray::try_new(
+                ListArray::<i64>::default_datatype(DataType::UInt64),
+                offsets.try_into()?,
+                PrimitiveArray::from_vec(values).to_boxed(),
+                None,
+            )?,
+            array_phantom: PhantomData::<A>::default(),
+        })
+    }
+
+    pub fn iter_arrays(&self) -> impl Iterator<Item = Option<Result<A, Error>>> + '_ {
+        self.list_array.iter().map(|opt| {
+            opt.map(|array| {
+                array
+                    .as_any()
+                    .downcast_ref::<PrimitiveArray<u64>>()
+                    .ok_or(Error::NotAPrimitiveArrayU64)
+                    .and_then(|pa| A::try_from(pa.clone()))
+            })
+        })
+    }
+}
+
+impl<A> From<H3ListArray<A>> for ListArray<i64> {
+    fn from(value: H3ListArray<A>) -> Self {
+        value.list_array
+    }
+}
+
+pub trait IterU64 {
+    type IndexType;
     type Iter: Iterator<Item = u64>;
 
     fn iter_u64(self) -> Self::Iter;
 }
 
-impl<T> IterU64 for Vec<T>
+impl<T, I> IterU64 for I
 where
+    I: IntoIterator<Item = T>,
     T: Copy,
     u64: From<T>,
 {
-    type Iter = std::iter::Map<IntoIter<T>, fn(T) -> u64>;
+    type IndexType = T;
+    type Iter = std::iter::Map<I::IntoIter, fn(T) -> u64>;
 
     fn iter_u64(self) -> Self::Iter {
         self.into_iter().map(u64::from)
     }
-}
-
-impl<T> IterU64 for Option<Vec<T>>
-where
-    T: Copy,
-    u64: From<T>,
-{
-    type Iter = std::iter::Map<IntoIter<T>, fn(T) -> u64>;
-
-    fn iter_u64(self) -> Self::Iter {
-        self.unwrap_or_default().iter_u64()
-    }
-}
-
-pub(crate) fn collect_h3listarray<I, T>(iter: I) -> Result<H3ListArray, Error>
-where
-    I: Iterator<Item = T>,
-    T: IterU64,
-{
-    let mut values = vec![];
-    let mut offsets = vec![];
-
-    for vc in iter {
-        offsets.push(values.len() as i64);
-        values.extend(vc.iter_u64());
-    }
-    offsets.push(values.len() as i64);
-
-    H3ListArray::try_new(
-        H3ListArray::default_datatype(DataType::UInt64),
-        offsets.try_into()?,
-        PrimitiveArray::from_vec(values).to_boxed(),
-        None,
-    )
-    .map_err(Error::from)
-}
-
-pub(crate) fn iter_cellindexarrays(
-    array: &H3ListArray,
-) -> impl Iterator<Item = Option<Result<CellIndexArray, Error>>> + '_ {
-    array.iter().map(|opt| {
-        opt.map(|array| {
-            array
-                .as_any()
-                .downcast_ref::<PrimitiveArray<u64>>()
-                .ok_or(Error::NotAPrimitiveArrayU64)
-                .and_then(|pa| CellIndexArray::try_from(pa.clone()))
-        })
-    })
 }

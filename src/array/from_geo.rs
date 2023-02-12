@@ -4,7 +4,7 @@ use h3o::{CellIndex, Resolution};
 #[cfg(feature = "rayon")]
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-use crate::array::list::{collect_h3listarray, H3ListArray};
+use crate::array::list::H3ListArray;
 use crate::array::CellIndexArray;
 use crate::error::Error;
 
@@ -156,16 +156,23 @@ where
 }
 
 pub trait ToCellListArray {
-    fn to_celllistarray(&self, resolution: Resolution) -> Result<H3ListArray, Error>;
+    fn to_celllistarray(
+        &self,
+        resolution: Resolution,
+    ) -> Result<H3ListArray<CellIndexArray>, Error>;
 }
 
 pub(crate) trait IterToCellListArray {
-    fn to_celllistarray(self, resolution: Resolution) -> Result<H3ListArray, Error>;
+    fn to_celllistarray(self, resolution: Resolution)
+        -> Result<H3ListArray<CellIndexArray>, Error>;
 }
 
 #[cfg(feature = "rayon")]
 trait ParIterToCellListArray {
-    fn par_to_celllistarray(self, resolution: Resolution) -> Result<H3ListArray, Error>;
+    fn par_to_celllistarray(
+        self,
+        resolution: Resolution,
+    ) -> Result<H3ListArray<CellIndexArray>, Error>;
 }
 
 #[cfg(feature = "rayon")]
@@ -173,8 +180,11 @@ impl<T> ParIterToCellListArray for T
 where
     T: ParallelIterator<Item = Option<Geometry>>,
 {
-    fn par_to_celllistarray(self, resolution: Resolution) -> Result<H3ListArray, Error> {
-        collect_h3listarray(
+    fn par_to_celllistarray(
+        self,
+        resolution: Resolution,
+    ) -> Result<H3ListArray<CellIndexArray>, Error> {
+        H3ListArray::try_from_iter(
             self.map(|geom| {
                 geom.map(|geom| to_cells(geom, resolution, vec![]))
                     .transpose()
@@ -189,8 +199,11 @@ impl<T> IterToCellListArray for T
 where
     T: Iterator<Item = Option<Geometry>>,
 {
-    fn to_celllistarray(self, resolution: Resolution) -> Result<H3ListArray, Error> {
-        collect_h3listarray(
+    fn to_celllistarray(
+        self,
+        resolution: Resolution,
+    ) -> Result<H3ListArray<CellIndexArray>, Error> {
+        H3ListArray::try_from_iter(
             self.map(|geom| {
                 geom.map(|geom| to_cells(geom, resolution, vec![]))
                     .transpose()
@@ -206,7 +219,10 @@ impl<T> ToCellListArray for &[T]
 where
     T: ToClonedGeometry + Sync,
 {
-    fn to_celllistarray(&self, resolution: Resolution) -> Result<H3ListArray, Error> {
+    fn to_celllistarray(
+        &self,
+        resolution: Resolution,
+    ) -> Result<H3ListArray<CellIndexArray>, Error> {
         self.into_par_iter()
             .map(|g| g.to_cloned_geometry())
             .par_to_celllistarray(resolution)
@@ -218,7 +234,10 @@ impl<T> ToCellListArray for &[T]
 where
     T: ToClonedGeometry,
 {
-    fn to_celllistarray(&self, resolution: Resolution) -> Result<H3ListArray, Error> {
+    fn to_celllistarray(
+        &self,
+        resolution: Resolution,
+    ) -> Result<H3ListArray<CellIndexArray>, Error> {
         self.iter()
             .map(|g| g.to_cloned_geometry())
             .to_celllistarray(resolution)

@@ -10,7 +10,7 @@ macro_rules! impl_from_geoarrow {
     ($($array_type:ty),*) => {
         $(
         impl ToCellListArray for $array_type {
-            fn to_celllistarray(&self, resolution: Resolution) -> Result<H3ListArray, Error> {
+            fn to_celllistarray(&self, resolution: Resolution) -> Result<H3ListArray<CellIndexArray>, Error> {
                 self.iter_geo()
                     .map(|v| v.map(Geometry::from))
                     .to_celllistarray(resolution)

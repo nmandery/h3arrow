@@ -1,7 +1,7 @@
 use arrow2::array::PrimitiveArray;
 use h3o::Resolution;
 
-use crate::array::list::{collect_h3listarray, transform_iter_to_listarray, H3ListArray};
+use crate::array::list::H3ListArray;
 use crate::array::{CellIndexArray, ResolutionArray};
 use crate::error::Error;
 
@@ -14,8 +14,12 @@ impl CellIndexArray {
         self.map_values(|cell| cell.parent(resolution)).collect()
     }
 
-    pub fn children(&self, resolution: Resolution) -> Result<H3ListArray, Error> {
-        transform_iter_to_listarray(self.iter(), |cell| Ok(cell.children(resolution)))
+    pub fn children(&self, resolution: Resolution) -> Result<H3ListArray<Self>, Error> {
+        H3ListArray::try_from_iter(
+            self.iter()
+                .map(|cell| cell.map(|cell| cell.children(resolution))),
+        )
+        // transform_iter_to_listarray(self.iter(), |cell| Ok(cell.children(resolution)))
     }
 
     pub fn children_count(&self, resolution: Resolution) -> PrimitiveArray<u64> {
@@ -23,8 +27,8 @@ impl CellIndexArray {
             .collect()
     }
 
-    pub fn grid_disk(&self, k: u32) -> Result<H3ListArray, Error> {
-        collect_h3listarray(self.iter().map(|cell| {
+    pub fn grid_disk(&self, k: u32) -> Result<H3ListArray<Self>, Error> {
+        H3ListArray::try_from_iter(self.iter().map(|cell| {
             cell.map(|cell| {
                 let disk: Vec<_> = cell.grid_disk(k);
                 disk
@@ -47,8 +51,6 @@ impl CellIndexArray {
 
 #[cfg(test)]
 mod test {
-    use arrow2::array::PrimitiveArray;
-    use arrow2::datatypes::DataType;
     use h3o::{LatLng, Resolution};
 
     use crate::array::CellIndexArray;
@@ -90,16 +92,9 @@ mod test {
 
         let children = arr.children(Resolution::Six).unwrap();
         assert_eq!(children.len(), 2);
-        let first = children.value(0);
-        assert_eq!(first.len(), 7);
-        assert_eq!(first.data_type(), &DataType::UInt64);
+        let cellarray = children.iter_arrays().next().flatten().unwrap().unwrap();
+        assert_eq!(cellarray.len(), 7);
 
-        let pa = first
-            .as_any()
-            .downcast_ref::<PrimitiveArray<u64>>()
-            .unwrap();
-
-        let cellarray: CellIndexArray = pa.clone().try_into().unwrap();
         assert_eq!(cellarray.len(), 7);
         for child in cellarray.iter().flatten() {
             assert_eq!(arr.iter().next().flatten(), child.parent(Resolution::Five));

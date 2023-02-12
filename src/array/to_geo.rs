@@ -1,4 +1,3 @@
-use crate::array::list::iter_cellindexarrays;
 use crate::array::{CellIndexArray, DirectedEdgeIndexArray, H3ListArray, VertexIndexArray};
 use crate::error::Error;
 use geo::CoordsIter;
@@ -101,12 +100,12 @@ pub trait ToGeoMultiPolygons {
     fn to_geo_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error>;
 }
 
-impl ToGeoMultiPolygons for H3ListArray {
+impl ToGeoMultiPolygons for H3ListArray<CellIndexArray> {
     type Error = Error;
     type Output = Vec<Option<MultiPolygon>>;
 
     fn to_geo_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error> {
-        iter_cellindexarrays(self)
+        self.iter_arrays()
             .map(|opt| {
                 opt.map(|res| {
                     res.and_then(|array| {
