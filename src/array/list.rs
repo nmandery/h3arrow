@@ -58,6 +58,7 @@ where
                 array
                     .as_any()
                     .downcast_ref::<PrimitiveArray<u64>>()
+                    // TODO: this should already be validated. unwrap/expect?
                     .ok_or(Error::NotAPrimitiveArrayU64)
                     .and_then(|pa| A::try_from(pa.clone()))
             })
@@ -70,6 +71,7 @@ where
             .values()
             .as_any()
             .downcast_ref::<PrimitiveArray<u64>>()
+            // TODO: this should already be validated. unwrap/expect?
             .ok_or(Error::NotAPrimitiveArrayU64)
             .and_then(|pa| {
                 A::try_from(
