@@ -63,6 +63,21 @@ where
             })
         })
     }
+
+    pub fn into_flattened(self) -> Result<A, Error> {
+        // TODO: check validity correctness
+        self.list_array
+            .values()
+            .as_any()
+            .downcast_ref::<PrimitiveArray<u64>>()
+            .ok_or(Error::NotAPrimitiveArrayU64)
+            .and_then(|pa| {
+                A::try_from(
+                    pa.clone()
+                        .with_validity(self.list_array.validity().cloned()),
+                )
+            })
+    }
 }
 
 impl<A> From<H3ListArray<A>> for ListArray<i64> {
@@ -108,5 +123,33 @@ where
 
     fn iter_u64(self) -> Self::Iter {
         self.into_iter().map(u64::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::array::{CellIndexArray, H3ListArray};
+    use h3o::{LatLng, Resolution};
+
+    #[test]
+    fn construct() {
+        let cell = LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five);
+
+        let list = H3ListArray::<CellIndexArray>::try_from_iter(
+            [Some(1), None, Some(2)]
+                .into_iter()
+                .map(|k| k.map(|k| cell.grid_disk::<Vec<_>>(k))),
+        )
+        .unwrap();
+        assert_eq!(list.len(), 3);
+        let mut list_iter = list.iter_arrays();
+        assert_eq!(list_iter.next().unwrap().unwrap().unwrap().len(), 7);
+        assert_eq!(list_iter.next().unwrap().unwrap().unwrap().len(), 0);
+        assert_eq!(list_iter.next().unwrap().unwrap().unwrap().len(), 19);
+        assert!(list_iter.next().is_none());
+        drop(list_iter);
+
+        let cells = list.into_flattened().unwrap();
+        assert_eq!(cells.len(), 26);
     }
 }
