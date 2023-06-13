@@ -103,7 +103,7 @@ mod test {
                 .into_inner()
                 .validity()
                 .cloned()
-                .unwrap_or_else(|| Bitmap::new())
+                .unwrap_or_else(Bitmap::new)
                 .unset_bits(),
             0
         )
