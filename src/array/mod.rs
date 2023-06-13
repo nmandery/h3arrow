@@ -13,13 +13,13 @@ use crate::error::Error;
 mod cell;
 mod directededge;
 pub mod from_geo;
-#[cfg(feature = "geoarrow")]
-pub mod from_geoarrow;
+//#[cfg(feature = "geoarrow")]
+//pub mod from_geoarrow;
 mod list;
 mod resolution;
 pub mod to_geo;
-#[cfg(feature = "geoarrow")]
-pub mod to_geoarrow;
+//#[cfg(feature = "geoarrow")]
+//pub mod to_geoarrow;
 mod validity;
 mod vertex;
 
@@ -191,8 +191,8 @@ macro_rules! impl_methods {
                 self.0.is_empty()
             }
 
-            pub fn slice(&self, offset: usize, length: usize) -> Self {
-                Self(self.0.slice(offset, length))
+            pub fn slice(&mut self, offset: usize, length: usize) {
+                self.0.slice(offset, length)
             }
 
             pub(crate) fn map_values<'s, F: 's, O>(

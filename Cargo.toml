@@ -13,14 +13,14 @@ repository = "https://github.com/nmandery/h3arrow"
 all-features = true
 
 [features]
-geoarrow = ["dep:geoarrow"]
+#geoarrow = ["dep:geoarrow"]
 rayon = ["dep:rayon"]
 
 [dependencies]
 ahash = "0.8"
-arrow2 = { version = "0.16", features = [] }
+arrow2 = { version = "0.17", features = [] }
 geo = "0.25"
-geoarrow = { git = "https://github.com/geopolars/geoarrow", rev = "ff1f840", optional = true }
+#geoarrow = { git = "https://github.com/geopolars/geoarrow", rev = "ff1f840", optional = true }
 geo-types = "0.7"
 h3o = { version = "0.3", features = ["geo"] }
 rayon = { version = "1", optional = true }
