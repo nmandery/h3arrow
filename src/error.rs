@@ -13,6 +13,9 @@ pub enum Error {
     InvalidResolution(#[from] h3o::error::InvalidResolution),
 
     #[error(transparent)]
+    InvalidLatLng(#[from] h3o::error::InvalidLatLng),
+
+    #[error(transparent)]
     InvalidGeometry(#[from] h3o::error::InvalidGeometry),
 
     #[error(transparent)]
@@ -26,4 +29,7 @@ pub enum Error {
 
     #[error("not a PrimitiveArray<u64>")]
     NotAPrimitiveArrayU64,
+
+    #[error("non-parsable CellIndex")]
+    NonParsableCellIndex,
 }
