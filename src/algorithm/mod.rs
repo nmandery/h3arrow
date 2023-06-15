@@ -4,6 +4,7 @@ pub mod change_resolution;
 pub mod compact;
 pub mod concave_hull;
 pub mod convex_hull;
+pub mod coordinates;
 pub mod parse;
 
 pub use bounding_rect::*;
@@ -12,4 +13,5 @@ pub use change_resolution::*;
 pub use compact::*;
 pub use concave_hull::*;
 pub use convex_hull::*;
+pub use coordinates::*;
 pub use parse::*;

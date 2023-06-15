@@ -59,7 +59,7 @@ pub fn parse_cell(s: &str) -> Result<CellIndex, Error> {
 
     // attempt to parse as coordinate pair and resolution
     if let Ok((_, (coord, res))) = parse_coordinate_and_resolution(s) {
-        return Ok(LatLng::try_from(coord)?.to_cell(Resolution::try_from(res)?));
+        return Ok(LatLng::new(coord.y, coord.x)?.to_cell(Resolution::try_from(res)?));
     }
 
     Err(Error::NonParsableCellIndex)
