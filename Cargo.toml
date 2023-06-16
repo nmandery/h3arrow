@@ -18,9 +18,9 @@ rayon = ["dep:rayon"]
 
 [dependencies]
 ahash = "0.8"
-arrow2 = { version = "0.16", features = [] }
+arrow2 = { version = "0.15", features = [] }
 geo = "0.25"
-geoarrow = { git = "https://github.com/geopolars/geoarrow", rev = "ff1f840", optional = true }
+geoarrow = { git = "https://github.com/geopolars/geoarrow", rev = "ff1f840ff4b64a9f1854672f59a2bdc4acd8df8f", optional = true }
 geo-types = "0.7"
 h3o = { version = "0.3", features = ["geo"] }
 rayon = { version = "1", optional = true }

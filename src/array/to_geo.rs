@@ -6,33 +6,33 @@ use h3o::geom::ToGeo;
 use h3o::LatLng;
 use std::convert::Infallible;
 
-pub trait ToGeoPolygons {
+pub trait ToPolygons {
     type Error;
-    fn to_geo_polygons(&self, use_degrees: bool) -> Result<Vec<Option<Polygon>>, Self::Error>;
+    fn to_polygons(&self, use_degrees: bool) -> Result<Vec<Option<Polygon>>, Self::Error>;
 }
 
-impl ToGeoPolygons for CellIndexArray {
+impl ToPolygons for CellIndexArray {
     type Error = Infallible;
 
-    fn to_geo_polygons(&self, use_degrees: bool) -> Result<Vec<Option<Polygon>>, Self::Error> {
+    fn to_polygons(&self, use_degrees: bool) -> Result<Vec<Option<Polygon>>, Self::Error> {
         Ok(self
             .map_values(|cell| cell.to_geom(use_degrees).ok())
             .collect())
     }
 }
 
-pub trait ToGeoPoints {
+pub trait ToPoints {
     type Error;
-    fn to_geo_points(&self, use_degrees: bool) -> Result<Vec<Option<Point>>, Self::Error>;
+    fn to_points(&self, use_degrees: bool) -> Result<Vec<Option<Point>>, Self::Error>;
 }
 
-macro_rules! impl_to_geo_points {
+macro_rules! impl_to_points {
     ($($array:ty),*) => {
         $(
-        impl ToGeoPoints for $array {
+        impl ToPoints for $array {
             type Error = Infallible;
 
-            fn to_geo_points(&self, use_degrees: bool) -> Result<Vec<Option<Point>>, Self::Error> {
+            fn to_points(&self, use_degrees: bool) -> Result<Vec<Option<Point>>, Self::Error> {
                 Ok(self.map_values(|cell| {
                     let ll = LatLng::from(cell);
                     Some(
@@ -57,60 +57,56 @@ macro_rules! impl_to_geo_points {
     };
 }
 
-impl_to_geo_points!(CellIndexArray, VertexIndexArray);
+impl_to_points!(CellIndexArray, VertexIndexArray);
 
-pub trait ToGeoLines {
+pub trait ToLines {
     type Error;
-    fn to_geo_lines(&self, use_degrees: bool) -> Result<Vec<Option<Line>>, Self::Error>;
+    fn to_lines(&self, use_degrees: bool) -> Result<Vec<Option<Line>>, Self::Error>;
 }
 
-impl ToGeoLines for DirectedEdgeIndexArray {
+impl ToLines for DirectedEdgeIndexArray {
     type Error = Infallible;
 
-    fn to_geo_lines(&self, use_degrees: bool) -> Result<Vec<Option<Line>>, Self::Error> {
+    fn to_lines(&self, use_degrees: bool) -> Result<Vec<Option<Line>>, Self::Error> {
         Ok(self
             .map_values(|cell| cell.to_geom(use_degrees).ok())
             .collect())
     }
 }
 
-pub trait ToGeoLineStrings {
+pub trait ToLineStrings {
     type Error;
-    fn to_geo_linestrings(&self, use_degrees: bool)
-        -> Result<Vec<Option<LineString>>, Self::Error>;
+    fn to_linestrings(&self, use_degrees: bool) -> Result<Vec<Option<LineString>>, Self::Error>;
 }
 
-impl ToGeoLineStrings for DirectedEdgeIndexArray {
+impl ToLineStrings for DirectedEdgeIndexArray {
     type Error = Infallible;
-    fn to_geo_linestrings(
-        &self,
-        use_degrees: bool,
-    ) -> Result<Vec<Option<LineString>>, Self::Error> {
+    fn to_linestrings(&self, use_degrees: bool) -> Result<Vec<Option<LineString>>, Self::Error> {
         Ok(self
-            .to_geo_lines(use_degrees)?
+            .to_lines(use_degrees)?
             .into_iter()
             .map(|l| l.map(LineString::from))
             .collect())
     }
 }
 
-pub trait ToGeoMultiPolygons {
+pub trait ToMultiPolygons {
     type Error;
     type Output;
-    fn to_geo_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error>;
+    fn to_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error>;
 }
 
-impl ToGeoMultiPolygons for H3ListArray<CellIndexArray> {
+impl ToMultiPolygons for H3ListArray<CellIndexArray> {
     type Error = Error;
     type Output = Vec<Option<MultiPolygon>>;
 
-    fn to_geo_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error> {
+    fn to_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error> {
         self.iter_arrays()
             .map(|opt| {
                 opt.map(|res| {
                     res.and_then(|array| {
                         array
-                            .to_geo_multipolygons(use_degrees)
+                            .to_multipolygons(use_degrees)
                             .map_err(Self::Error::from)
                     })
                 })
@@ -120,11 +116,11 @@ impl ToGeoMultiPolygons for H3ListArray<CellIndexArray> {
     }
 }
 
-impl ToGeoMultiPolygons for CellIndexArray {
+impl ToMultiPolygons for CellIndexArray {
     type Error = Error;
     type Output = MultiPolygon;
 
-    fn to_geo_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error> {
+    fn to_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error> {
         self.iter()
             .flatten()
             .to_geom(use_degrees)
@@ -136,7 +132,7 @@ impl ToGeoMultiPolygons for CellIndexArray {
 pub(crate) fn directededgeindexarray_to_multipoint(array: &DirectedEdgeIndexArray) -> MultiPoint {
     MultiPoint::new(
         array
-            .to_geo_lines(true)
+            .to_lines(true)
             .expect("line vec")
             .into_iter()
             .flatten()
@@ -149,7 +145,7 @@ pub(crate) fn directededgeindexarray_to_multipoint(array: &DirectedEdgeIndexArra
 pub(crate) fn vertexindexarray_to_multipoint(array: &VertexIndexArray) -> MultiPoint {
     MultiPoint::new(
         array
-            .to_geo_points(true)
+            .to_points(true)
             .expect("point vec")
             .into_iter()
             .flatten()
@@ -160,7 +156,7 @@ pub(crate) fn vertexindexarray_to_multipoint(array: &VertexIndexArray) -> MultiP
 pub(crate) fn cellindexarray_to_multipolygon(array: &CellIndexArray) -> MultiPolygon {
     MultiPolygon::new(
         array
-            .to_geo_polygons(true)
+            .to_polygons(true)
             .expect("polygon vec")
             .into_iter()
             .flatten()

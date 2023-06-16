@@ -1,4 +1,4 @@
-use crate::array::to_geo::{ToGeoLines, ToGeoPoints, ToGeoPolygons};
+use crate::array::to_geo::{ToLines, ToPoints, ToPolygons};
 use crate::array::{CellIndexArray, DirectedEdgeIndexArray, VertexIndexArray};
 use geo::bounding_rect::BoundingRect;
 use geo_types::Rect;
@@ -8,7 +8,7 @@ impl BoundingRect<f64> for CellIndexArray {
 
     fn bounding_rect(&self) -> Self::Output {
         collect_rect(
-            self.to_geo_polygons(true)
+            self.to_polygons(true)
                 .expect("polygon vec")
                 .into_iter()
                 .flatten()
@@ -22,7 +22,7 @@ impl BoundingRect<f64> for VertexIndexArray {
 
     fn bounding_rect(&self) -> Self::Output {
         collect_rect(
-            self.to_geo_points(true)
+            self.to_points(true)
                 .expect("point vec")
                 .into_iter()
                 .flatten()
@@ -36,7 +36,7 @@ impl BoundingRect<f64> for DirectedEdgeIndexArray {
 
     fn bounding_rect(&self) -> Self::Output {
         collect_rect(
-            self.to_geo_lines(true)
+            self.to_lines(true)
                 .expect("line vec")
                 .into_iter()
                 .flatten()

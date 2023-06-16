@@ -1,4 +1,4 @@
-use crate::array::to_geo::{ToGeoLines, ToGeoPoints};
+use crate::array::to_geo::{ToLines, ToPoints};
 use crate::array::{CellIndexArray, DirectedEdgeIndexArray, VertexIndexArray};
 use geo::centroid::Centroid;
 use geo_types::{MultiPoint, Point};
@@ -11,7 +11,7 @@ macro_rules! impl_point_based_centroid {
 
             fn centroid(&self) -> Self::Output {
                 MultiPoint::new(
-                    self.to_geo_points(true)
+                    self.to_points(true)
                         .expect("point vec")
                         .into_iter()
                         .flatten()
@@ -31,7 +31,7 @@ impl Centroid for DirectedEdgeIndexArray {
 
     fn centroid(&self) -> Self::Output {
         MultiPoint::new(
-            self.to_geo_lines(true)
+            self.to_lines(true)
                 .expect("line vec")
                 .into_iter()
                 .flatten()
