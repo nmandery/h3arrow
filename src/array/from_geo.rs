@@ -333,17 +333,15 @@ fn to_cells(
 
 #[cfg(test)]
 mod tests {
-    use crate::array::from_geo::ToCellIndexArray;
+    use crate::array::from_geo::{ToCellIndexArray, ToCellsOptions};
     use geo_types::Rect;
     use h3o::Resolution;
 
     #[test]
     fn from_rect() {
         let rect = vec![Rect::new((10., 10.), (20., 20.))];
-        let cells = rect
-            .as_slice()
-            .to_cellindexarray(Resolution::Four.into())
-            .unwrap();
+        let options = ToCellsOptions::from(Resolution::Four);
+        let cells = rect.as_slice().to_cellindexarray(&options).unwrap();
         assert!(cells.len() > 400);
         let resolution = cells.resolution();
         assert_eq!(cells.len(), resolution.len());
