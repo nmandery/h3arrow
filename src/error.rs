@@ -32,4 +32,7 @@ pub enum Error {
 
     #[error("non-parsable CellIndex")]
     NonParsableCellIndex,
+
+    #[error("Invalid WKB encountered")]
+    InvalidWKB,
 }
