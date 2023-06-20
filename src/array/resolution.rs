@@ -39,8 +39,8 @@ impl ResolutionArray {
         self.0.is_empty()
     }
 
-    pub fn slice(&self, offset: usize, length: usize) -> Self {
-        Self(self.0.slice(offset, length))
+    pub fn slice(&mut self, offset: usize, length: usize) {
+        self.0.slice(offset, length)
     }
 
     pub fn area_rads2(&self) -> PrimitiveArray<f64> {

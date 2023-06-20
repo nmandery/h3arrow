@@ -1,6 +1,7 @@
 use crate::array::H3Array;
 use crate::error::Error;
 use arrow2::array::{Array, ListArray, PrimitiveArray};
+use arrow2::bitmap::{Bitmap, MutableBitmap};
 use arrow2::datatypes::DataType;
 use std::marker::PhantomData;
 
@@ -25,33 +26,6 @@ where
         self.list_array.is_empty()
     }
 
-    pub fn try_from_iter<I1, I2>(iter: I1) -> Result<Self, Error>
-    where
-        I1: Iterator<Item = Option<I2>>,
-        I2: IterU64<IndexType = A::Index>,
-    {
-        let mut values = vec![];
-        let mut offsets = vec![];
-
-        for vc in iter {
-            offsets.push(values.len() as i64);
-            if let Some(vc) = vc {
-                values.extend(vc.iter_u64());
-            }
-        }
-        offsets.push(values.len() as i64);
-
-        Ok(Self {
-            list_array: ListArray::try_new(
-                ListArray::<i64>::default_datatype(DataType::UInt64),
-                offsets.try_into()?,
-                PrimitiveArray::from_vec(values).to_boxed(),
-                None,
-            )?,
-            array_phantom: PhantomData::<A>::default(),
-        })
-    }
-
     pub fn iter_arrays(&self) -> impl Iterator<Item = Option<Result<A, Error>>> + '_ {
         self.list_array.iter().map(|opt| {
             opt.map(|array| {
@@ -73,12 +47,7 @@ where
             .downcast_ref::<PrimitiveArray<u64>>()
             // TODO: this should already be validated. unwrap/expect?
             .ok_or(Error::NotAPrimitiveArrayU64)
-            .and_then(|pa| {
-                A::try_from(
-                    pa.clone()
-                        .with_validity(self.list_array.validity().cloned()),
-                )
-            })
+            .and_then(|pa| A::try_from(pa.clone()))
     }
 }
 
@@ -128,25 +97,96 @@ where
     }
 }
 
+pub struct H3ListArrayBuilder<A> {
+    array_phantom: PhantomData<A>,
+    values: Vec<u64>,
+    offsets: Vec<i64>,
+    list_validity: Vec<bool>,
+}
+
+impl<A> Default for H3ListArrayBuilder<A>
+where
+    A: H3Array,
+{
+    fn default() -> Self {
+        Self::with_capacity(100)
+    }
+}
+
+impl<A> H3ListArrayBuilder<A>
+where
+    A: H3Array,
+{
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            array_phantom: PhantomData::<A>::default(),
+            values: Vec::with_capacity(capacity),
+            offsets: Vec::with_capacity(capacity),
+            list_validity: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn push_invalid(&mut self) {
+        self.offsets.push(self.values.len() as i64);
+        self.list_validity.push(false);
+    }
+
+    pub fn push_valid<I>(&mut self, it: I)
+    where
+        I: IterU64<IndexType = A::Index>,
+    {
+        self.offsets.push(self.values.len() as i64);
+        self.values.extend(it.iter_u64());
+        self.list_validity.push(true);
+    }
+
+    pub fn build(mut self) -> Result<H3ListArray<A>, Error> {
+        self.offsets.push(self.values.len() as i64);
+        let validity: Bitmap = MutableBitmap::from_iter(self.list_validity.into_iter()).into();
+        Ok(H3ListArray {
+            list_array: ListArray::try_new(
+                ListArray::<i64>::default_datatype(DataType::UInt64),
+                self.offsets.try_into()?,
+                PrimitiveArray::from_vec(self.values).to_boxed(),
+                if validity.unset_bits() == 0 {
+                    None
+                } else {
+                    Some(validity)
+                },
+            )?,
+            array_phantom: PhantomData::<A>::default(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::array::{CellIndexArray, H3ListArray};
+    use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
     use h3o::{LatLng, Resolution};
 
     #[test]
     fn construct() {
         let cell = LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five);
 
+        let mut builder = H3ListArrayBuilder::<CellIndexArray>::default();
+        builder.push_valid(cell.grid_disk::<Vec<_>>(1));
+        builder.push_invalid();
+        builder.push_valid(cell.grid_disk::<Vec<_>>(2));
+        let list = builder.build().unwrap();
+
+        /*
         let list = H3ListArray::<CellIndexArray>::try_from_iter(
             [Some(1), None, Some(2)]
                 .into_iter()
                 .map(|k| k.map(|k| cell.grid_disk::<Vec<_>>(k))),
         )
         .unwrap();
+
+         */
         assert_eq!(list.len(), 3);
         let mut list_iter = list.iter_arrays();
         assert_eq!(list_iter.next().unwrap().unwrap().unwrap().len(), 7);
-        assert_eq!(list_iter.next().unwrap().unwrap().unwrap().len(), 0);
+        assert!(list_iter.next().unwrap().is_none());
         assert_eq!(list_iter.next().unwrap().unwrap().unwrap().len(), 19);
         assert!(list_iter.next().is_none());
         drop(list_iter);

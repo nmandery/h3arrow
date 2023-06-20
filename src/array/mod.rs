@@ -191,8 +191,8 @@ macro_rules! impl_methods {
                 self.0.is_empty()
             }
 
-            pub fn slice(&self, offset: usize, length: usize) -> Self {
-                Self(self.0.slice(offset, length))
+            pub fn slice(&mut self, offset: usize, length: usize) {
+                self.0.slice(offset, length)
             }
 
             pub(crate) fn map_values<'s, F: 's, O>(

@@ -7,7 +7,7 @@ use h3o::{CellIndex, Resolution};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 use crate::array::list::H3ListArray;
-use crate::array::CellIndexArray;
+use crate::array::{CellIndexArray, H3ListArrayBuilder};
 use crate::error::Error;
 
 pub struct ToCellsOptions {
@@ -194,11 +194,18 @@ where
         self,
         options: &ToCellsOptions,
     ) -> Result<H3ListArray<CellIndexArray>, Error> {
-        H3ListArray::try_from_iter(
-            self.map(|geom| geom.map(|geom| to_cells(geom, options, vec![])).transpose())
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter(),
-        )
+        let cell_vecs = self
+            .map(|geom| geom.map(|geom| to_cells(geom, options, vec![])).transpose())
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut builder = H3ListArrayBuilder::<CellIndexArray>::default();
+        for cells in cell_vecs.into_iter() {
+            if let Some(cells) = cells {
+                builder.push_valid(cells.into_iter());
+            } else {
+                builder.push_invalid();
+            }
+        }
+        builder.build()
     }
 }
 
@@ -210,11 +217,15 @@ where
         self,
         options: &ToCellsOptions,
     ) -> Result<H3ListArray<CellIndexArray>, Error> {
-        H3ListArray::try_from_iter(
-            self.map(|geom| geom.map(|geom| to_cells(geom, options, vec![])).transpose())
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter(),
-        )
+        let mut builder = H3ListArrayBuilder::<CellIndexArray>::default();
+        for geom in self {
+            if let Some(geom) = geom {
+                builder.push_valid(to_cells(geom, options, vec![])?.into_iter());
+            } else {
+                builder.push_invalid();
+            }
+        }
+        builder.build()
     }
 }
 

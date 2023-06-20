@@ -2,7 +2,7 @@ use arrow2::array::PrimitiveArray;
 use h3o::Resolution;
 
 use crate::array::list::H3ListArray;
-use crate::array::{CellIndexArray, ResolutionArray};
+use crate::array::{CellIndexArray, H3ListArrayBuilder, ResolutionArray};
 use crate::error::Error;
 
 impl CellIndexArray {
@@ -15,11 +15,15 @@ impl CellIndexArray {
     }
 
     pub fn children(&self, resolution: Resolution) -> Result<H3ListArray<Self>, Error> {
-        H3ListArray::try_from_iter(
-            self.iter()
-                .map(|cell| cell.map(|cell| cell.children(resolution))),
-        )
-        // transform_iter_to_listarray(self.iter(), |cell| Ok(cell.children(resolution)))
+        let mut builder = H3ListArrayBuilder::<Self>::default();
+        for value in self.iter() {
+            if let Some(cell) = value {
+                builder.push_valid(cell.children(resolution))
+            } else {
+                builder.push_invalid()
+            }
+        }
+        builder.build()
     }
 
     pub fn children_count(&self, resolution: Resolution) -> PrimitiveArray<u64> {
@@ -28,12 +32,15 @@ impl CellIndexArray {
     }
 
     pub fn grid_disk(&self, k: u32) -> Result<H3ListArray<Self>, Error> {
-        H3ListArray::try_from_iter(self.iter().map(|cell| {
-            cell.map(|cell| {
-                let disk: Vec<_> = cell.grid_disk(k);
-                disk
-            })
-        }))
+        let mut builder = H3ListArrayBuilder::<Self>::default();
+        for value in self.iter() {
+            if let Some(cell) = value {
+                builder.push_valid(cell.grid_disk::<Vec<_>>(k).into_iter())
+            } else {
+                builder.push_invalid()
+            }
+        }
+        builder.build()
     }
 
     pub fn area_rads2(&self) -> PrimitiveArray<f64> {

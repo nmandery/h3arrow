@@ -3,7 +3,7 @@ use super::from_geo::{
 };
 use crate::algorithm::CompactOp;
 use crate::array::from_geo::geometry_to_cells;
-use crate::array::{CellIndexArray, H3ListArray};
+use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
 use crate::error::Error;
 use geo_types::Geometry;
 use geoarrow::{GeometryArrayTrait, WKBArray};
@@ -68,7 +68,15 @@ impl ToCellListArray for WKBArray {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        H3ListArray::<CellIndexArray>::try_from_iter(cell_vecs.into_iter())
+        let mut builder = H3ListArrayBuilder::<CellIndexArray>::default();
+        for cells in cell_vecs.into_iter() {
+            if let Some(cells) = cells {
+                builder.push_valid(cells.into_iter())
+            } else {
+                builder.push_invalid()
+            }
+        }
+        builder.build()
     }
 }
 
