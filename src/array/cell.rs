@@ -1,24 +1,10 @@
 use arrow2::array::PrimitiveArray;
 
-use crate::array::list::H3ListArray;
-use crate::array::{CellIndexArray, H3ListArrayBuilder, ResolutionArray};
-use crate::error::Error;
+use crate::array::{CellIndexArray, ResolutionArray};
 
 impl CellIndexArray {
     pub fn resolution(&self) -> ResolutionArray {
         self.map_values(|cell| Some(cell.resolution())).collect()
-    }
-
-    pub fn grid_disk(&self, k: u32) -> Result<H3ListArray<Self>, Error> {
-        let mut builder = H3ListArrayBuilder::<Self>::default();
-        for value in self.iter() {
-            if let Some(cell) = value {
-                builder.push_valid(cell.grid_disk::<Vec<_>>(k).into_iter())
-            } else {
-                builder.push_invalid()
-            }
-        }
-        builder.build()
     }
 
     pub fn area_rads2(&self) -> PrimitiveArray<f64> {
