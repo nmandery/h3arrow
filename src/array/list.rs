@@ -161,7 +161,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
+    use crate::array::{CellIndexArray, H3ListArrayBuilder};
     use h3o::{LatLng, Resolution};
 
     #[test]
