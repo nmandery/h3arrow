@@ -140,6 +140,19 @@ where
         self.list_validity.push(true);
     }
 
+    pub fn extend<I1, I2>(&mut self, it: I1)
+    where
+        I1: Iterator<Item = Option<I2>>,
+        I2: IterU64<IndexType = A::Index>,
+    {
+        for sub_iter in it {
+            match sub_iter {
+                Some(sub_iter) => self.push_valid(sub_iter),
+                None => self.push_invalid(),
+            }
+        }
+    }
+
     pub fn build(mut self) -> Result<H3ListArray<A>, Error> {
         self.offsets.push(self.values.len() as i64);
         let validity: Bitmap = MutableBitmap::from_iter(self.list_validity.into_iter()).into();

@@ -11,13 +11,10 @@ where
 impl GridOp for CellIndexArray {
     fn grid_disk(&self, k: u32) -> Result<H3ListArray<Self>, Error> {
         let mut builder = H3ListArrayBuilder::<Self>::default();
-        for value in self.iter() {
-            if let Some(cell) = value {
-                builder.push_valid(cell.grid_disk::<Vec<_>>(k).into_iter())
-            } else {
-                builder.push_invalid()
-            }
-        }
+        builder.extend(
+            self.iter()
+                .map(|cell| cell.map(|cell| cell.grid_disk::<Vec<_>>(k))),
+        );
         builder.build()
     }
 }
