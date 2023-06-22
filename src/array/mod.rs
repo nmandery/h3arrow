@@ -32,8 +32,8 @@ pub struct DirectedEdgeIndexArray(PrimitiveArray<u64>);
 #[derive(Clone, PartialEq)]
 pub struct VertexIndexArray(PrimitiveArray<u64>);
 
-pub trait H3Array {
-    type Index: Sized;
+pub trait H3Array: TryFrom<PrimitiveArray<u64>, Error = Error> {
+    type Index: Sized + Into<u64> + TryFrom<u64> + Copy;
 
     fn primitive_array(&self) -> &PrimitiveArray<u64>;
 }

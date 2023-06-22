@@ -3,11 +3,12 @@ use crate::error::Error;
 use arrow2::array::{Array, ListArray, PrimitiveArray};
 use arrow2::bitmap::{Bitmap, MutableBitmap};
 use arrow2::datatypes::DataType;
+use arrow2::types::NativeType;
 use std::marker::PhantomData;
 
 pub struct H3ListArray<A> {
-    list_array: ListArray<i64>,
-    array_phantom: PhantomData<A>,
+    pub(crate) list_array: ListArray<i64>,
+    pub(crate) array_phantom: PhantomData<A>,
 }
 
 impl<A> H3ListArray<A>
@@ -76,32 +77,60 @@ where
     }
 }
 
-pub trait IterU64 {
-    type IndexType;
-    type Iter: Iterator<Item = u64>;
-
-    fn iter_u64(self) -> Self::Iter;
+pub(crate) struct ListArrayBuilder<T: NativeType> {
+    values: Vec<T>,
+    offsets: Vec<i64>,
+    list_validity: Vec<bool>,
 }
 
-impl<T, I> IterU64 for I
-where
-    I: IntoIterator<Item = T>,
-    T: Copy,
-    u64: From<T>,
-{
-    type IndexType = T;
-    type Iter = std::iter::Map<I::IntoIter, fn(T) -> u64>;
+impl<T: NativeType> Default for ListArrayBuilder<T> {
+    fn default() -> Self {
+        Self::with_capacity(100)
+    }
+}
 
-    fn iter_u64(self) -> Self::Iter {
-        self.into_iter().map(u64::from)
+impl<T: NativeType> ListArrayBuilder<T> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            values: Vec::with_capacity(capacity),
+            offsets: Vec::with_capacity(capacity),
+            list_validity: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn push_invalid(&mut self) {
+        self.offsets.push(self.values.len() as i64);
+        self.list_validity.push(false);
+    }
+
+    pub fn push_valid<I>(&mut self, it: I)
+    where
+        I: IntoIterator<Item = T>,
+    {
+        self.offsets.push(self.values.len() as i64);
+        self.values.extend(it);
+        self.list_validity.push(true);
+    }
+
+    pub fn build(mut self) -> Result<ListArray<i64>, Error> {
+        self.offsets.push(self.values.len() as i64);
+        let validity: Bitmap = MutableBitmap::from_iter(self.list_validity.into_iter()).into();
+        Ok(ListArray::try_new(
+            ListArray::<i64>::default_datatype(DataType::UInt64),
+            self.offsets.try_into()?,
+            PrimitiveArray::from_vec(self.values).to_boxed(),
+            if validity.unset_bits() == 0 {
+                None
+            } else {
+                Some(validity)
+            },
+        )?)
     }
 }
 
 pub struct H3ListArrayBuilder<A> {
     array_phantom: PhantomData<A>,
-    values: Vec<u64>,
-    offsets: Vec<i64>,
-    list_validity: Vec<bool>,
+    builder: ListArrayBuilder<u64>,
 }
 
 impl<A> Default for H3ListArrayBuilder<A>
@@ -120,30 +149,26 @@ where
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             array_phantom: PhantomData::<A>::default(),
-            values: Vec::with_capacity(capacity),
-            offsets: Vec::with_capacity(capacity),
-            list_validity: Vec::with_capacity(capacity),
+            builder: ListArrayBuilder::with_capacity(capacity),
         }
     }
 
     pub fn push_invalid(&mut self) {
-        self.offsets.push(self.values.len() as i64);
-        self.list_validity.push(false);
+        self.builder.push_invalid();
     }
 
     pub fn push_valid<I>(&mut self, it: I)
     where
-        I: IterU64<IndexType = A::Index>,
+        I: IntoIterator<Item = A::Index>,
     {
-        self.offsets.push(self.values.len() as i64);
-        self.values.extend(it.iter_u64());
-        self.list_validity.push(true);
+        self.builder
+            .push_valid(it.into_iter().map(|index| index.into()));
     }
 
     pub fn extend<I1, I2>(&mut self, it: I1)
     where
         I1: Iterator<Item = Option<I2>>,
-        I2: IterU64<IndexType = A::Index>,
+        I2: IntoIterator<Item = A::Index>,
     {
         for sub_iter in it {
             match sub_iter {
@@ -153,20 +178,9 @@ where
         }
     }
 
-    pub fn build(mut self) -> Result<H3ListArray<A>, Error> {
-        self.offsets.push(self.values.len() as i64);
-        let validity: Bitmap = MutableBitmap::from_iter(self.list_validity.into_iter()).into();
+    pub fn build(self) -> Result<H3ListArray<A>, Error> {
         Ok(H3ListArray {
-            list_array: ListArray::try_new(
-                ListArray::<i64>::default_datatype(DataType::UInt64),
-                self.offsets.try_into()?,
-                PrimitiveArray::from_vec(self.values).to_boxed(),
-                if validity.unset_bits() == 0 {
-                    None
-                } else {
-                    Some(validity)
-                },
-            )?,
+            list_array: self.builder.build()?,
             array_phantom: PhantomData::<A>::default(),
         })
     }
