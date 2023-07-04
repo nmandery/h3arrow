@@ -20,7 +20,7 @@ rayon = ["dep:rayon"]
 ahash = "0.8"
 arrow2 = { version = "0.17", features = [] }
 geo = "0.25"
-geoarrow = { git = "https://github.com/nmandery/geoarrow", rev = "1b7fb57847ccd2042c1b0e2f995fa3c446ebaa6f", optional = true }
+geoarrow = { git = "https://github.com/geopolars/geoarrow", rev = "fefafeb493269685c1f1431032e01bc859b98e58", optional = true }
 geo-types = "0.7"
 geozero = { version = "0.9", default-features = false, features = ["with-geo", "with-wkb"], optional = true }
 h3o = { version = "0.3", features = ["geo"] }
