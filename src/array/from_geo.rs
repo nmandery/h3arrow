@@ -164,17 +164,11 @@ where
 }
 
 pub trait ToCellListArray {
-    fn to_celllistarray(
-        &self,
-        options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndexArray>, Error>;
+    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error>;
 }
 
 pub(crate) trait IterToCellListArray {
-    fn to_celllistarray(
-        self,
-        options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndexArray>, Error>;
+    fn to_celllistarray(self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error>;
 }
 
 #[cfg(feature = "rayon")]
@@ -182,7 +176,7 @@ trait ParIterToCellListArray {
     fn par_to_celllistarray(
         self,
         options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndexArray>, Error>;
+    ) -> Result<H3ListArray<CellIndex>, Error>;
 }
 
 #[cfg(feature = "rayon")]
@@ -193,11 +187,11 @@ where
     fn par_to_celllistarray(
         self,
         options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndexArray>, Error> {
+    ) -> Result<H3ListArray<CellIndex>, Error> {
         let cell_vecs = self
             .map(|geom| geom.map(|geom| to_cells(geom, options, vec![])).transpose())
             .collect::<Result<Vec<_>, _>>()?;
-        let mut builder = H3ListArrayBuilder::<CellIndexArray>::default();
+        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
         for cells in cell_vecs.into_iter() {
             if let Some(cells) = cells {
                 builder.push_valid(cells.into_iter());
@@ -213,11 +207,9 @@ impl<T> IterToCellListArray for T
 where
     T: Iterator<Item = Option<Geometry>>,
 {
-    fn to_celllistarray(
-        self,
-        options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndexArray>, Error> {
-        let mut builder = H3ListArrayBuilder::<CellIndexArray>::default();
+    fn to_celllistarray(self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
+        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
+
         for geom in self {
             if let Some(geom) = geom {
                 builder.push_valid(to_cells(geom, options, vec![])?.into_iter());
@@ -234,10 +226,7 @@ impl<T> ToCellListArray for &[T]
 where
     T: ToClonedGeometry + Sync,
 {
-    fn to_celllistarray(
-        &self,
-        options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndexArray>, Error> {
+    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
         self.into_par_iter()
             .map(|g| g.to_cloned_geometry())
             .par_to_celllistarray(options)
@@ -249,10 +238,7 @@ impl<T> ToCellListArray for &[T]
 where
     T: ToClonedGeometry,
 {
-    fn to_celllistarray(
-        &self,
-        options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndexArray>, Error> {
+    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
         self.iter()
             .map(|g| g.to_cloned_geometry())
             .to_celllistarray(options)

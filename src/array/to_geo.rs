@@ -3,7 +3,7 @@ use crate::error::Error;
 use geo::CoordsIter;
 use geo_types::{Coord, Line, LineString, MultiPoint, MultiPolygon, Point, Polygon};
 use h3o::geom::ToGeo;
-use h3o::LatLng;
+use h3o::{CellIndex, LatLng};
 use std::convert::Infallible;
 
 pub trait ToPolygons {
@@ -16,7 +16,8 @@ impl ToPolygons for CellIndexArray {
 
     fn to_polygons(&self, use_degrees: bool) -> Result<Vec<Option<Polygon>>, Self::Error> {
         Ok(self
-            .map_values(|cell| cell.to_geom(use_degrees).ok())
+            .iter()
+            .map(|v| v.and_then(|cell| cell.to_geom(use_degrees).ok()))
             .collect())
     }
 }
@@ -33,24 +34,24 @@ macro_rules! impl_to_points {
             type Error = Infallible;
 
             fn to_points(&self, use_degrees: bool) -> Result<Vec<Option<Point>>, Self::Error> {
-                Ok(self.map_values(|cell| {
-                    let ll = LatLng::from(cell);
-                    Some(
-                        if use_degrees {
-                            Coord {
-                                x: ll.lng(),
-                                y: ll.lng(),
+                Ok(self.iter()
+                    .map(|v| {
+                        v.map(|cell| {
+                        let ll = LatLng::from(cell);
+                            if use_degrees {
+                                Coord {
+                                    x: ll.lng(),
+                                    y: ll.lng(),
+                                }.into()
+                            } else {
+                                Coord {
+                                    x: ll.lng_radians(),
+                                    y: ll.lat_radians(),
+                                }.into()
                             }
-                        } else {
-                            Coord {
-                                x: ll.lng_radians(),
-                                y: ll.lat_radians(),
-                            }
-                        }
-                        .into(),
-                    )
-                })
-                .collect())
+                        })
+                    })
+                    .collect())
             }
         }
         )*
@@ -69,7 +70,8 @@ impl ToLines for DirectedEdgeIndexArray {
 
     fn to_lines(&self, use_degrees: bool) -> Result<Vec<Option<Line>>, Self::Error> {
         Ok(self
-            .map_values(|cell| cell.to_geom(use_degrees).ok())
+            .iter()
+            .map(|v| v.and_then(|cell| cell.to_geom(use_degrees).ok()))
             .collect())
     }
 }
@@ -83,9 +85,11 @@ impl ToLineStrings for DirectedEdgeIndexArray {
     type Error = Infallible;
     fn to_linestrings(&self, use_degrees: bool) -> Result<Vec<Option<LineString>>, Self::Error> {
         Ok(self
-            .to_lines(use_degrees)?
-            .into_iter()
-            .map(|l| l.map(LineString::from))
+            .iter()
+            .map(|v| {
+                v.and_then(|cell| cell.to_geom(use_degrees).ok())
+                    .map(LineString::from)
+            })
             .collect())
     }
 }
@@ -96,7 +100,7 @@ pub trait ToMultiPolygons {
     fn to_multipolygons(&self, use_degrees: bool) -> Result<Self::Output, Self::Error>;
 }
 
-impl ToMultiPolygons for H3ListArray<CellIndexArray> {
+impl ToMultiPolygons for H3ListArray<CellIndex> {
     type Error = Error;
     type Output = Vec<Option<MultiPolygon>>;
 

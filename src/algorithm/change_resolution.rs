@@ -100,7 +100,7 @@ mod test {
         // no invalid values
         assert_eq!(
             arr_res_six
-                .into_inner()
+                .primitive_array()
                 .validity()
                 .cloned()
                 .unwrap_or_else(Bitmap::new)

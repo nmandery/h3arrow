@@ -8,6 +8,7 @@ use crate::error::Error;
 use geo_types::Geometry;
 use geoarrow::{GeometryArrayTrait, WKBArray};
 use geozero::ToGeo;
+use h3o::CellIndex;
 #[cfg(feature = "rayon")]
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
@@ -15,7 +16,7 @@ macro_rules! impl_from_geoarrow {
     ($($array_type:ty),*) => {
         $(
         impl ToCellListArray for $array_type {
-            fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndexArray>, Error> {
+            fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
                 self.iter_geo()
                     .map(|v| v.map(Geometry::from))
                     .to_celllistarray(options)
@@ -44,10 +45,7 @@ impl_from_geoarrow!(
 );
 
 impl ToCellListArray for WKBArray {
-    fn to_celllistarray(
-        &self,
-        options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndexArray>, Error> {
+    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
         #[cfg(not(feature = "rayon"))]
         let pos_iter = (0..self.len()).into_iter();
 
@@ -68,7 +66,7 @@ impl ToCellListArray for WKBArray {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut builder = H3ListArrayBuilder::<CellIndexArray>::default();
+        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
         for cells in cell_vecs.into_iter() {
             if let Some(cells) = cells {
                 builder.push_valid(cells.into_iter())

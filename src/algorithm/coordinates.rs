@@ -1,4 +1,4 @@
-use crate::array::{CellIndexArray, H3Array};
+use crate::array::CellIndexArray;
 use crate::error::Error;
 use arrow2::array::Float64Array;
 use h3o::LatLng;

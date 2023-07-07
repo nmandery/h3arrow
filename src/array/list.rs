@@ -1,4 +1,4 @@
-use crate::array::H3Array;
+use crate::array::{H3Array, H3IndexArrayValue};
 use crate::error::Error;
 use arrow2::array::{Array, ListArray, PrimitiveArray};
 use arrow2::bitmap::{Bitmap, MutableBitmap};
@@ -6,17 +6,18 @@ use arrow2::datatypes::DataType;
 use arrow2::types::NativeType;
 use std::marker::PhantomData;
 
-pub struct H3ListArray<A> {
+pub struct H3ListArray<IX> {
     pub(crate) list_array: ListArray<i64>,
-    pub(crate) array_phantom: PhantomData<A>,
+    pub(crate) h3index_phantom: PhantomData<IX>,
 }
 
-impl<A> H3ListArray<A>
+impl<IX> H3ListArray<IX>
 where
-    A: H3Array + TryFrom<PrimitiveArray<u64>, Error = Error>,
+    IX: H3IndexArrayValue,
+    H3Array<IX>: TryFrom<PrimitiveArray<u64>, Error = Error>,
 {
-    pub fn into_inner(self) -> ListArray<i64> {
-        self.list_array
+    pub fn listarray(&self) -> &ListArray<i64> {
+        &self.list_array
     }
 
     pub fn len(&self) -> usize {
@@ -27,7 +28,7 @@ where
         self.list_array.is_empty()
     }
 
-    pub fn iter_arrays(&self) -> impl Iterator<Item = Option<Result<A, Error>>> + '_ {
+    pub fn iter_arrays(&self) -> impl Iterator<Item = Option<Result<H3Array<IX>, Error>>> + '_ {
         self.list_array.iter().map(|opt| {
             opt.map(|array| {
                 array
@@ -35,12 +36,12 @@ where
                     .downcast_ref::<PrimitiveArray<u64>>()
                     // TODO: this should already be validated. unwrap/expect?
                     .ok_or(Error::NotAPrimitiveArrayU64)
-                    .and_then(|pa| A::try_from(pa.clone()))
+                    .and_then(|pa| pa.clone().try_into())
             })
         })
     }
 
-    pub fn into_flattened(self) -> Result<A, Error> {
+    pub fn into_flattened(self) -> Result<H3Array<IX>, Error> {
         // TODO: check validity correctness
         self.list_array
             .values()
@@ -48,28 +49,30 @@ where
             .downcast_ref::<PrimitiveArray<u64>>()
             // TODO: this should already be validated. unwrap/expect?
             .ok_or(Error::NotAPrimitiveArrayU64)
-            .and_then(|pa| A::try_from(pa.clone()))
+            .and_then(|pa| pa.clone().try_into())
     }
 }
 
-impl<A> From<H3ListArray<A>> for ListArray<i64> {
-    fn from(value: H3ListArray<A>) -> Self {
+impl<IX> From<H3ListArray<IX>> for ListArray<i64> {
+    fn from(value: H3ListArray<IX>) -> Self {
         value.list_array
     }
 }
 
-impl<A> TryFrom<ListArray<i64>> for H3ListArray<A>
+impl<IX> TryFrom<ListArray<i64>> for H3ListArray<IX>
 where
-    A: H3Array + TryFrom<PrimitiveArray<u64>, Error = Error>,
+    IX: H3IndexArrayValue,
+    H3Array<IX>: TryFrom<PrimitiveArray<u64>, Error = Error>,
 {
     type Error = Error;
 
     fn try_from(value: ListArray<i64>) -> Result<Self, Self::Error> {
         let instance = Self {
             list_array: value,
-            array_phantom: PhantomData::<A>::default(),
+            h3index_phantom: PhantomData::<IX>::default(),
         };
 
+        // validate
         for a in instance.iter_arrays().flatten() {
             let _ = a?;
         }
@@ -128,27 +131,27 @@ impl<T: NativeType> ListArrayBuilder<T> {
     }
 }
 
-pub struct H3ListArrayBuilder<A> {
-    array_phantom: PhantomData<A>,
+pub struct H3ListArrayBuilder<IX> {
+    h3index_phantom: PhantomData<IX>,
     builder: ListArrayBuilder<u64>,
 }
 
-impl<A> Default for H3ListArrayBuilder<A>
+impl<IX> Default for H3ListArrayBuilder<IX>
 where
-    A: H3Array,
+    IX: H3IndexArrayValue,
 {
     fn default() -> Self {
         Self::with_capacity(100)
     }
 }
 
-impl<A> H3ListArrayBuilder<A>
+impl<IX> H3ListArrayBuilder<IX>
 where
-    A: H3Array,
+    IX: H3IndexArrayValue,
 {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            array_phantom: PhantomData::<A>::default(),
+            h3index_phantom: PhantomData::<IX>::default(),
             builder: ListArrayBuilder::with_capacity(capacity),
         }
     }
@@ -159,7 +162,7 @@ where
 
     pub fn push_valid<I>(&mut self, it: I)
     where
-        I: IntoIterator<Item = A::Index>,
+        I: IntoIterator<Item = IX>,
     {
         self.builder
             .push_valid(it.into_iter().map(|index| index.into()));
@@ -168,7 +171,7 @@ where
     pub fn extend<I1, I2>(&mut self, it: I1)
     where
         I1: Iterator<Item = Option<I2>>,
-        I2: IntoIterator<Item = A::Index>,
+        I2: IntoIterator<Item = IX>,
     {
         for sub_iter in it {
             match sub_iter {
@@ -178,31 +181,31 @@ where
         }
     }
 
-    pub fn build(self) -> Result<H3ListArray<A>, Error> {
+    pub fn build(self) -> Result<H3ListArray<IX>, Error> {
         Ok(H3ListArray {
             list_array: self.builder.build()?,
-            array_phantom: PhantomData::<A>::default(),
+            h3index_phantom: PhantomData::<IX>::default(),
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::array::{CellIndexArray, H3ListArrayBuilder};
-    use h3o::{LatLng, Resolution};
+    use crate::array::H3ListArrayBuilder;
+    use h3o::{CellIndex, LatLng, Resolution};
 
     #[test]
     fn construct() {
         let cell = LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five);
 
-        let mut builder = H3ListArrayBuilder::<CellIndexArray>::default();
+        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
         builder.push_valid(cell.grid_disk::<Vec<_>>(1));
         builder.push_invalid();
         builder.push_valid(cell.grid_disk::<Vec<_>>(2));
         let list = builder.build().unwrap();
 
         /*
-        let list = H3ListArray::<CellIndexArray>::try_from_iter(
+        let list = H3ListArray::<CellIndex>::try_from_iter(
             [Some(1), None, Some(2)]
                 .into_iter()
                 .map(|k| k.map(|k| cell.grid_disk::<Vec<_>>(k))),

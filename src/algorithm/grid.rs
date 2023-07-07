@@ -11,8 +11,8 @@ use std::collections::hash_map::Entry;
 use std::default::Default;
 use std::marker::PhantomData;
 
-pub struct GridDiskDistances<A: H3Array> {
-    pub cells: H3ListArray<A>,
+pub struct GridDiskDistances {
+    pub cells: H3ListArray<CellIndex>,
     pub distances: ListArray<i64>,
 }
 
@@ -29,12 +29,11 @@ pub struct GridDiskAggregateK {
 
 pub trait GridOp
 where
-    Self: Sized + H3Array,
+    Self: Sized,
 {
-    fn grid_disk(&self, k: u32) -> Result<H3ListArray<Self>, Error>;
-    fn grid_disk_distances(&self, k: u32) -> Result<GridDiskDistances<Self>, Error>;
-    fn grid_ring_distances(&self, k_min: u32, k_max: u32)
-        -> Result<GridDiskDistances<Self>, Error>;
+    fn grid_disk(&self, k: u32) -> Result<H3ListArray<CellIndex>, Error>;
+    fn grid_disk_distances(&self, k: u32) -> Result<GridDiskDistances, Error>;
+    fn grid_ring_distances(&self, k_min: u32, k_max: u32) -> Result<GridDiskDistances, Error>;
     fn grid_disk_aggregate_k(
         &self,
         k: u32,
@@ -42,9 +41,9 @@ where
     ) -> Result<GridDiskAggregateK, Error>;
 }
 
-impl GridOp for CellIndexArray {
-    fn grid_disk(&self, k: u32) -> Result<H3ListArray<Self>, Error> {
-        let mut builder = H3ListArrayBuilder::<Self>::default();
+impl GridOp for H3Array<CellIndex> {
+    fn grid_disk(&self, k: u32) -> Result<H3ListArray<CellIndex>, Error> {
+        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
         builder.extend(
             self.iter()
                 .map(|cell| cell.map(|cell| cell.grid_disk::<Vec<_>>(k))),
@@ -52,15 +51,11 @@ impl GridOp for CellIndexArray {
         builder.build()
     }
 
-    fn grid_disk_distances(&self, k: u32) -> Result<GridDiskDistances<Self>, Error> {
+    fn grid_disk_distances(&self, k: u32) -> Result<GridDiskDistances, Error> {
         build_grid_disk(self, k, |_, _| true)
     }
 
-    fn grid_ring_distances(
-        &self,
-        k_min: u32,
-        k_max: u32,
-    ) -> Result<GridDiskDistances<Self>, Error> {
+    fn grid_ring_distances(&self, k_min: u32, k_max: u32) -> Result<GridDiskDistances, Error> {
         build_grid_disk(self, k_max, |_, k| k >= k_min)
     }
 
@@ -105,7 +100,7 @@ fn build_grid_disk<F>(
     cellindexarray: &CellIndexArray,
     k: u32,
     filter: F,
-) -> Result<GridDiskDistances<CellIndexArray>, Error>
+) -> Result<GridDiskDistances, Error>
 where
     F: Fn(CellIndex, u32) -> bool,
 {
@@ -155,7 +150,7 @@ where
                 PrimitiveArray::from_vec(grid_cells).to_boxed(),
                 list_validity.clone(),
             )?,
-            array_phantom: PhantomData::<CellIndexArray>::default(),
+            h3index_phantom: PhantomData::<CellIndex>::default(),
         },
         distances: ListArray::try_new(
             ListArray::<i64>::default_datatype(DataType::UInt32),

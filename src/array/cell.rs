@@ -1,22 +1,56 @@
 use arrow2::array::PrimitiveArray;
+use h3o::{CellIndex, Resolution};
 
-use crate::array::{CellIndexArray, ResolutionArray};
+use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder, ResolutionArray};
+use crate::error::Error;
 
 impl CellIndexArray {
     pub fn resolution(&self) -> ResolutionArray {
-        self.map_values(|cell| Some(cell.resolution())).collect()
+        self.iter()
+            .map(|cell| cell.map(|cell| cell.resolution()))
+            .collect()
     }
 
     pub fn area_rads2(&self) -> PrimitiveArray<f64> {
-        self.map_values(|cell| Some(cell.area_rads2())).collect()
+        self.iter()
+            .map(|cell| cell.map(|cell| cell.area_rads2()))
+            .collect()
     }
 
     pub fn area_km2(&self) -> PrimitiveArray<f64> {
-        self.map_values(|cell| Some(cell.area_km2())).collect()
+        self.iter()
+            .map(|cell| cell.map(|cell| cell.area_km2()))
+            .collect()
     }
 
     pub fn area_m2(&self) -> PrimitiveArray<f64> {
-        self.map_values(|cell| Some(cell.area_m2())).collect()
+        self.iter()
+            .map(|cell| cell.map(|cell| cell.area_m2()))
+            .collect()
+    }
+
+    pub fn parent(&self, resolution: Resolution) -> Self {
+        self.iter()
+            .map(|cell| cell.and_then(|cell| cell.parent(resolution)))
+            .collect()
+    }
+
+    pub fn children(&self, resolution: Resolution) -> Result<H3ListArray<CellIndex>, Error> {
+        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
+        for value in self.iter() {
+            if let Some(cell) = value {
+                builder.push_valid(cell.children(resolution))
+            } else {
+                builder.push_invalid()
+            }
+        }
+        builder.build()
+    }
+
+    pub fn children_count(&self, resolution: Resolution) -> PrimitiveArray<u64> {
+        self.iter()
+            .map(|cell| cell.map(|cell| cell.children_count(resolution)))
+            .collect()
     }
 }
 
@@ -51,5 +85,24 @@ mod test {
             r_values,
             vec![Some(Resolution::Five), Some(Resolution::Nine)]
         );
+    }
+
+    #[test]
+    fn children() {
+        let arr: CellIndexArray = vec![
+            LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five),
+            LatLng::new(12.3, 0.5).unwrap().to_cell(Resolution::Nine),
+        ]
+        .into();
+
+        let children = arr.children(Resolution::Six).unwrap();
+        assert_eq!(children.len(), 2);
+        let cellarray = children.iter_arrays().next().flatten().unwrap().unwrap();
+        assert_eq!(cellarray.len(), 7);
+
+        assert_eq!(cellarray.len(), 7);
+        for child in cellarray.iter().flatten() {
+            assert_eq!(arr.iter().next().flatten(), child.parent(Resolution::Five));
+        }
     }
 }
