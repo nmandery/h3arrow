@@ -90,7 +90,7 @@ where
     /// Returns the element at index `i` or `None` if it is null
     /// # Panics
     /// iff `i >= self.len()`
-    pub fn get(self, i: usize) -> Option<IX> {
+    pub fn get(&self, i: usize) -> Option<IX> {
         self.primitive_array.get(i).map(IX::transmute_from_u64)
     }
 }
