@@ -1,6 +1,6 @@
 use crate::array::to_geo::{ToLineStrings, ToLines, ToPoints, ToPolygons};
 use geo_types::Geometry;
-use geoarrow::{LineStringArray, PointArray, PolygonArray, WKBArray};
+use geoarrow::array::{LineStringArray, PointArray, PolygonArray, WKBArray};
 
 pub trait ToGeoArrowPolygons {
     type Error;

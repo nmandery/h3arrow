@@ -6,7 +6,8 @@ use crate::array::from_geo::geometry_to_cells;
 use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
 use crate::error::Error;
 use geo_types::Geometry;
-use geoarrow::{GeometryArrayTrait, WKBArray};
+use geoarrow::array::WKBArray;
+use geoarrow::GeometryArrayTrait;
 use geozero::ToGeo;
 use h3o::CellIndex;
 #[cfg(feature = "rayon")]
@@ -36,12 +37,12 @@ macro_rules! impl_from_geoarrow {
 }
 
 impl_from_geoarrow!(
-    geoarrow::LineStringArray,
-    geoarrow::MultiLineStringArray,
-    geoarrow::MultiPointArray,
-    geoarrow::MultiPolygonArray,
-    geoarrow::PointArray,
-    geoarrow::PolygonArray
+    geoarrow::array::LineStringArray,
+    geoarrow::array::MultiLineStringArray,
+    geoarrow::array::MultiPointArray,
+    geoarrow::array::MultiPolygonArray,
+    geoarrow::array::PointArray,
+    geoarrow::array::PolygonArray
 );
 
 impl ToCellListArray for WKBArray {

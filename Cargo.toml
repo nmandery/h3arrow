@@ -21,7 +21,7 @@ spatial_index = ["dep:rstar"]
 ahash = "0.8"
 arrow2 = { version = "0.17", features = [] }
 geo = "0.25"
-geoarrow = { git = "https://github.com/geopolars/geoarrow", rev = "fefafeb493269685c1f1431032e01bc859b98e58", optional = true }
+geoarrow = { package = "geoarrow2", version = "0.0.1", optional = true, features = ["geozero"] }
 geo-types = "0.7"
 geozero = { version = "0.9", default-features = false, features = ["with-geo", "with-wkb"], optional = true }
 h3o = { version = "0.3", features = ["geo"] }
