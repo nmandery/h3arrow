@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Nico Mandery <nico@nmandery.net>"]
 license = "MIT"
-keywords = ["geo", "spatial", "h3"]
+keywords = ["geo", "spatial", "h3", "arrow"]
 readme = "README.md"
 homepage = "https://github.com/nmandery/h3arrow"
 repository = "https://github.com/nmandery/h3arrow"
@@ -20,10 +20,10 @@ spatial_index = ["dep:rstar"]
 [dependencies]
 ahash = "0.8"
 arrow2 = { version = "0.17", features = [] }
-geo = "0.25"
+geo = "0.26"
 geoarrow = { package = "geoarrow2", version = "0.0.1", optional = true, features = ["geozero"] }
 geo-types = "0.7"
-geozero = { version = "0.9", default-features = false, features = ["with-geo", "with-wkb"], optional = true }
+geozero = { version = "0.10", default-features = false, features = ["with-geo", "with-wkb"], optional = true }
 h3o = { version = "0.3", features = ["geo"] }
 nom = "7"
 rayon = { version = "1", optional = true }

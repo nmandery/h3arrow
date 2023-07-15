@@ -69,7 +69,7 @@ where
     fn try_from(value: ListArray<i64>) -> Result<Self, Self::Error> {
         let instance = Self {
             list_array: value,
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
         };
 
         // validate
@@ -151,7 +151,7 @@ where
 {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
             builder: ListArrayBuilder::with_capacity(capacity),
         }
     }
@@ -184,7 +184,7 @@ where
     pub fn build(self) -> Result<H3ListArray<IX>, Error> {
         Ok(H3ListArray {
             list_array: self.builder.build()?,
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
         })
     }
 }

@@ -126,7 +126,7 @@ where
             .try_for_each(|h3index| IX::try_from(*h3index).map(|_| ()))?;
         Ok(H3Array {
             primitive_array: value,
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
         })
     }
 }
@@ -147,7 +147,7 @@ where
             .map_err(Self::Error::from)?;
         Ok(Self {
             primitive_array: PrimitiveArray::from_vec(validated),
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
         })
     }
 }
@@ -177,7 +177,7 @@ where
     fn from_iter<T: IntoIterator<Item = IX>>(iter: T) -> Self {
         Self {
             primitive_array: PrimitiveArray::from_iter(iter.into_iter().map(|v| Some(v.into()))),
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
         }
     }
 }
@@ -191,7 +191,7 @@ where
             primitive_array: PrimitiveArray::from_iter(
                 iter.into_iter().map(|v| v.map(|v| v.into())),
             ),
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
         }
     }
 }
@@ -212,7 +212,7 @@ where
                 iter.into_iter()
                     .map(|h3index| IX::try_from(h3index).ok().map(|v| v.into())),
             ),
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
         }
     }
 }
@@ -226,7 +226,7 @@ where
             primitive_array: PrimitiveArray::from_iter(iter.into_iter().map(|h3index| {
                 h3index.and_then(|h3index| IX::try_from(h3index).ok().map(|v| v.into()))
             })),
-            h3index_phantom: PhantomData::<IX>::default(),
+            h3index_phantom: PhantomData::<IX>,
         }
     }
 }

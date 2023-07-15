@@ -150,7 +150,7 @@ where
                 PrimitiveArray::from_vec(grid_cells).to_boxed(),
                 list_validity.clone(),
             )?,
-            h3index_phantom: PhantomData::<CellIndex>::default(),
+            h3index_phantom: PhantomData::<CellIndex>,
         },
         distances: ListArray::try_new(
             ListArray::<i64>::default_datatype(DataType::UInt32),
