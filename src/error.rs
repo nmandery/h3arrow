@@ -33,6 +33,15 @@ pub enum Error {
     #[error("non-parsable CellIndex")]
     NonParsableCellIndex,
 
+    #[error("non-parsable VertexIndex")]
+    NonParsableVertexIndex,
+
+    #[error("non-parsable DirectedEdgeIndex")]
+    NonParsableDirectedEdgeIndex,
+
     #[error("Invalid WKB encountered")]
     InvalidWKB,
+
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
 }

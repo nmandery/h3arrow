@@ -2,11 +2,9 @@ use std::iter::Map;
 use std::marker::PhantomData;
 use std::mem::transmute;
 use std::slice::Iter;
-use std::str::FromStr;
 
-use arrow2::array::{Array, PrimitiveArray, Utf8Array};
+use arrow2::array::{Array, PrimitiveArray};
 use arrow2::bitmap::utils::{BitmapIter, ZipValidity};
-use arrow2::types::Offset;
 use h3o::{CellIndex, DirectedEdgeIndex, VertexIndex};
 
 pub use list::*;
@@ -255,74 +253,5 @@ where
 {
     fn from_with_validity(value: PrimitiveArray<u64>) -> Self {
         Self::from_iter_with_validity(value.iter().map(|v| v.copied()))
-    }
-}
-
-impl<IX, O: Offset> TryFrom<Utf8Array<O>> for H3Array<IX>
-where
-    IX: H3IndexArrayValue + FromStr,
-    Error: From<<IX as FromStr>::Err>,
-{
-    type Error = Error;
-
-    fn try_from(value: Utf8Array<O>) -> Result<Self, Self::Error> {
-        value
-            .iter()
-            .map(|v| v.map(IX::from_str).transpose())
-            .collect::<Result<Vec<_>, _>>()
-            .map(|v| v.into())
-            .map_err(Self::Error::from)
-    }
-}
-
-impl<IX, O: Offset> FromWithValidity<Utf8Array<O>> for H3Array<IX>
-where
-    IX: H3IndexArrayValue + FromStr,
-{
-    fn from_with_validity(value: Utf8Array<O>) -> Self {
-        Self::from_iter(
-            value
-                .iter()
-                .map(|v| v.and_then(|index| IX::from_str(index).ok())),
-        )
-    }
-}
-
-impl<IX, O: Offset> From<H3Array<IX>> for Utf8Array<O>
-where
-    IX: ToString + H3IndexArrayValue,
-{
-    fn from(value: H3Array<IX>) -> Self {
-        value
-            .iter()
-            .map(|index| index.map(|i| i.to_string()))
-            .collect()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::CellIndexArray;
-    use arrow2::array::Utf8Array;
-    use h3o::{LatLng, Resolution};
-
-    #[test]
-    fn to_utf8array_roundtrip() {
-        let arr: CellIndexArray = vec![
-            LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five),
-            LatLng::new(12.3, 0.5).unwrap().to_cell(Resolution::Nine),
-        ]
-        .into();
-
-        let utf8: Utf8Array<i32> = arr.clone().into();
-        assert_eq!(utf8.len(), arr.len());
-
-        assert_eq!(
-            utf8.iter().flatten().collect::<Vec<_>>(),
-            vec!["855968a3fffffff", "89599da10d3ffff"]
-        );
-
-        let arr2: CellIndexArray = utf8.try_into().unwrap();
-        assert!(arr == arr2);
     }
 }

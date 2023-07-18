@@ -6,7 +6,7 @@ pub mod concave_hull;
 pub mod convex_hull;
 pub mod coordinates;
 pub mod grid;
-pub mod parse;
+pub mod utf8;
 
 pub use bounding_rect::*;
 pub use centroid::*;
@@ -16,4 +16,4 @@ pub use concave_hull::*;
 pub use convex_hull::*;
 pub use coordinates::*;
 pub use grid::*;
-pub use parse::*;
+pub use utf8::*;
