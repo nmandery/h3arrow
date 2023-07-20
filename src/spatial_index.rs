@@ -2,7 +2,7 @@ use arrow2::bitmap::{Bitmap, MutableBitmap};
 use geo::{BoundingRect, Intersects};
 use geo_types::{Coord, MultiPolygon, Polygon, Rect};
 use h3o::geom::ToGeo;
-use h3o::{CellIndex, DirectedEdgeIndex, VertexIndex};
+use h3o::{CellIndex, DirectedEdgeIndex, LatLng, VertexIndex};
 use rstar::primitives::{GeomWithData, Rectangle};
 use rstar::{RTree, AABB};
 
@@ -19,7 +19,13 @@ impl RectIndexable for CellIndex {
     }
 
     fn intersects_with_polygon(&self, poly: &Polygon) -> bool {
-        poly.intersects(&self.to_geom(true).unwrap())
+        // do a cheaper centroid containment check first before comparing the polygons
+        let centroid: Coord = LatLng::from(*self).into();
+        if poly.intersects(&centroid) {
+            poly.intersects(&self.to_geom(true).unwrap())
+        } else {
+            false
+        }
     }
 }
 
