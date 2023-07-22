@@ -135,7 +135,7 @@ where
 
     pub fn intersect_multipolygon(&self, mpoly: &MultiPolygon) -> Bitmap {
         let mut mask = negative_mask(self.array.len());
-        for poly in mpoly.0.iter() {
+        for poly in mpoly.iter() {
             if let Some(poly_rect) = poly.bounding_rect() {
                 self.intersect_impl(&poly_rect, &mut mask, |ix| ix.intersects_with_polygon(poly))
             }
