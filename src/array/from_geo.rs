@@ -257,7 +257,7 @@ pub fn geometry_to_cells(
         }
         (Geometry::MultiPolygon(mpoly), true) => {
             let mut cells = Vec::new();
-            for poly in mpoly.0.iter() {
+            for poly in mpoly.iter() {
                 fill_including_intersecting(&mut cells, poly, options.resolution)?;
             }
             cells
