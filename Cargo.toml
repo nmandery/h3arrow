@@ -25,7 +25,7 @@ geo = "0.26"
 geoarrow = { package = "geoarrow2", version = "0.0.1", optional = true, features = ["geozero"] }
 geo-types = "0.7"
 geozero = { version = "0.10", default-features = false, features = ["with-geo", "with-wkb"], optional = true }
-h3o = { version = "0.3", features = ["geo"] }
+h3o = { version = "0.4", features = ["geo"] }
 nom = "7"
 rayon = { version = "1", optional = true }
 thiserror = "1"

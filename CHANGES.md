@@ -6,5 +6,9 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## Unreleased (will be v0.1.0 (YYYY-MM-DD TBD))
+## Unreleased (YYYY-MM-DD TBD)
+
+* Upgrade h3o from v0.3 to v0.4. Due to the new polyfill modes this lead to API breakages in the `ToCellsOptions` struct.
+
+## v0.1.0 (2023-07-24)
 * Initial release
