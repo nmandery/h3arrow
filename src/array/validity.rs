@@ -17,7 +17,7 @@ where
     T: FromIteratorWithValidity<u64>,
 {
     fn from_with_validity(value: Vec<u64>) -> Self {
-        Self::from_iter_with_validity(value.into_iter())
+        Self::from_iter_with_validity(value)
     }
 }
 
@@ -26,7 +26,7 @@ where
     T: FromIteratorWithValidity<Option<u64>>,
 {
     fn from_with_validity(value: Vec<Option<u64>>) -> Self {
-        Self::from_iter_with_validity(value.into_iter())
+        Self::from_iter_with_validity(value)
     }
 }
 

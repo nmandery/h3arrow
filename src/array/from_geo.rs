@@ -286,7 +286,7 @@ fn to_cells(
     options: &ToCellsOptions,
     mut acc: Vec<CellIndex>,
 ) -> Result<Vec<CellIndex>, Error> {
-    acc.extend(geometry_to_cells(&geom, options)?.into_iter());
+    acc.extend(geometry_to_cells(&geom, options)?);
     Ok(acc)
 }
 

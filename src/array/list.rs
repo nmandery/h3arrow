@@ -117,7 +117,7 @@ impl<T: NativeType> ListArrayBuilder<T> {
 
     pub fn build(mut self) -> Result<ListArray<i64>, Error> {
         self.offsets.push(self.values.len() as i64);
-        let validity: Bitmap = MutableBitmap::from_iter(self.list_validity.into_iter()).into();
+        let validity: Bitmap = MutableBitmap::from_iter(self.list_validity).into();
         Ok(ListArray::try_new(
             ListArray::<i64>::default_datatype(DataType::UInt64),
             self.offsets.try_into()?,

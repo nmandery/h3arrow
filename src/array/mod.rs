@@ -155,7 +155,7 @@ where
     IX: H3IndexArrayValue,
 {
     fn from(value: Vec<IX>) -> Self {
-        Self::from_iter(value.into_iter())
+        Self::from_iter(value)
     }
 }
 
@@ -164,7 +164,7 @@ where
     IX: H3IndexArrayValue,
 {
     fn from(value: Vec<Option<IX>>) -> Self {
-        Self::from_iter(value.into_iter())
+        Self::from_iter(value)
     }
 }
 
@@ -234,7 +234,7 @@ where
     IX: H3IndexArrayValue,
 {
     fn from_with_validity(value: Vec<u64>) -> Self {
-        Self::from_iter_with_validity(value.into_iter())
+        Self::from_iter_with_validity(value)
     }
 }
 
@@ -243,7 +243,7 @@ where
     IX: H3IndexArrayValue,
 {
     fn from_with_validity(value: Vec<Option<u64>>) -> Self {
-        Self::from_iter_with_validity(value.into_iter())
+        Self::from_iter_with_validity(value)
     }
 }
 

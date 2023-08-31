@@ -134,7 +134,7 @@ where
     offsets.push(grid_cells.len() as i64);
     let offsets: OffsetsBuffer<i64> = offsets.try_into()?;
     let list_validity = {
-        let validity: Bitmap = MutableBitmap::from_iter(list_validity.into_iter()).into();
+        let validity: Bitmap = MutableBitmap::from_iter(list_validity).into();
         if validity.unset_bits() == 0 {
             None
         } else {

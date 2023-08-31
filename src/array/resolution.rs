@@ -104,13 +104,13 @@ impl FromIterator<Option<Resolution>> for ResolutionArray {
 
 impl From<Vec<Resolution>> for ResolutionArray {
     fn from(value: Vec<Resolution>) -> Self {
-        Self::from_iter(value.into_iter())
+        Self::from_iter(value)
     }
 }
 
 impl From<Vec<Option<Resolution>>> for ResolutionArray {
     fn from(value: Vec<Option<Resolution>>) -> Self {
-        Self::from_iter(value.into_iter())
+        Self::from_iter(value)
     }
 }
 
@@ -139,12 +139,12 @@ impl FromIteratorWithValidity<Option<u8>> for ResolutionArray {
 
 impl FromWithValidity<Vec<u8>> for ResolutionArray {
     fn from_with_validity(value: Vec<u8>) -> Self {
-        Self::from_iter_with_validity(value.into_iter())
+        Self::from_iter_with_validity(value)
     }
 }
 
 impl FromWithValidity<Vec<Option<u8>>> for ResolutionArray {
     fn from_with_validity(value: Vec<Option<u8>>) -> Self {
-        Self::from_iter_with_validity(value.into_iter())
+        Self::from_iter_with_validity(value)
     }
 }
