@@ -1,6 +1,6 @@
 [package]
 name = "h3arrow"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Nico Mandery <nico@nmandery.net>"]
 description = "Integration of the H3 geospatial grid with the arrow memory model"
