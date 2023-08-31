@@ -1,7 +1,5 @@
-use ahash::HashSet;
-use geo::Intersects;
 use geo_types::*;
-use h3o::geom::{ToCells, ToGeo};
+use h3o::geom::{ContainmentMode, PolyfillConfig, ToCells};
 use h3o::{CellIndex, Resolution};
 #[cfg(feature = "rayon")]
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
@@ -10,19 +8,37 @@ use crate::array::list::H3ListArray;
 use crate::array::{CellIndexArray, H3ListArrayBuilder};
 use crate::error::Error;
 
+#[derive(Clone, Copy, Debug)]
 pub struct ToCellsOptions {
-    pub resolution: Resolution,
-    pub compact: bool,
-    pub all_intersecting: bool,
+    pub(crate) polyfill_config: PolyfillConfig,
+    pub(crate) compact: bool,
+}
+
+impl From<PolyfillConfig> for ToCellsOptions {
+    fn from(polyfill_config: PolyfillConfig) -> Self {
+        Self::new(polyfill_config)
+    }
+}
+
+impl ToCellsOptions {
+    pub fn new(polyfill_config: PolyfillConfig) -> Self {
+        Self {
+            polyfill_config,
+            compact: false,
+        }
+    }
+
+    pub fn compact(mut self, compact: bool) -> Self {
+        self.compact = compact;
+        self
+    }
 }
 
 impl From<Resolution> for ToCellsOptions {
     fn from(resolution: Resolution) -> Self {
-        Self {
-            resolution,
-            compact: false,
-            all_intersecting: false,
-        }
+        PolyfillConfig::new(resolution)
+            .containment_mode(ContainmentMode::ContainsCentroid)
+            .into()
     }
 }
 
@@ -249,23 +265,9 @@ pub fn geometry_to_cells(
     geom: &Geometry,
     options: &ToCellsOptions,
 ) -> Result<Vec<CellIndex>, Error> {
-    let mut cells: Vec<CellIndex> = match (geom, options.all_intersecting) {
-        (Geometry::Polygon(poly), true) => {
-            let mut cells = Vec::new();
-            fill_including_intersecting(&mut cells, poly, options.resolution)?;
-            cells
-        }
-        (Geometry::MultiPolygon(mpoly), true) => {
-            let mut cells = Vec::new();
-            for poly in mpoly.iter() {
-                fill_including_intersecting(&mut cells, poly, options.resolution)?;
-            }
-            cells
-        }
-        _ => h3o::geom::Geometry::from_degrees(geom.clone())?
-            .to_cells(options.resolution)
-            .collect::<Vec<_>>(),
-    };
+    let mut cells: Vec<_> = h3o::geom::Geometry::from_degrees(geom.clone())?
+        .to_cells(options.polyfill_config)
+        .collect();
 
     // deduplicate, in the case of overlaps or lines
     cells.sort_unstable();
@@ -277,46 +279,6 @@ pub fn geometry_to_cells(
         cells
     };
     Ok(cells)
-}
-
-fn fill_including_intersecting(
-    sink: &mut Vec<CellIndex>,
-    poly: &Polygon,
-    resolution: Resolution,
-) -> Result<(), Error> {
-    let mut ring_cells: Vec<_> = h3o::geom::LineString::from_degrees(poly.exterior().clone())?
-        .to_cells(resolution)
-        .collect();
-    for interior_ring in poly.interiors() {
-        ring_cells.extend(
-            h3o::geom::LineString::from_degrees(interior_ring.clone())?.to_cells(resolution),
-        );
-    }
-    ring_cells.sort_unstable();
-    ring_cells.dedup();
-
-    let mut cells: HashSet<_> = h3o::geom::Polygon::from_degrees(poly.clone())?
-        .to_cells(resolution)
-        .collect();
-
-    let mut non_intersecting_cells = HashSet::default();
-    for ring_cell in ring_cells {
-        let disk_cells: Vec<_> = ring_cell.grid_disk(1);
-        for disk_cell in disk_cells {
-            if cells.contains(&disk_cell) || non_intersecting_cells.contains(&disk_cell) {
-                continue;
-            }
-            let disk_poly = disk_cell.to_geom(true).unwrap();
-            if poly.intersects(&disk_poly) {
-                cells.insert(disk_cell);
-            } else {
-                non_intersecting_cells.insert(disk_cell);
-            }
-        }
-    }
-
-    sink.extend(cells.into_iter());
-    Ok(())
 }
 
 fn to_cells(
