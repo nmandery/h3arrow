@@ -141,6 +141,12 @@ pub trait ParseUtf8Array {
     /// Setting `set_failing_to_invalid` to true will trigger setting the validity bitmap according
     /// the successful parsing of an individual element. Having this set to false will cause the
     /// method to fail upon encountering the first unparsable value.
+    ///
+    /// This function is able to parse multiple representations of H3 cells:
+    ///
+    /// * hexadecimal (Example: "8552dc63fffffff")
+    /// * numeric integer strings (Example: "600436454824345599")
+    /// * strings like "[x], [y], [resolution]" or "[x]; [y]; [resolution]". (Example: "10.2,45.5,5")
     fn parse_utf8array<O: Offset>(
         utf8array: &Utf8Array<O>,
         set_failing_to_invalid: bool,
