@@ -19,14 +19,15 @@ where
     /// change the H3 resolutions of all contained values to `resolution`.
     ///
     /// In case of resolution increases all child indexes will be added, so the returned
-    /// value may contain more indexes then `self`.
+    /// value may contain more indexes than `self`.
     ///
     /// Invalid/empty values are omitted.
     fn change_resolution(&self, resolution: Resolution) -> Result<Self, Error>;
 
-    /// change the H3 resolutions of all contained values to `resolution`.
+    /// Change the H3 resolutions of all contained values to `resolution`.
     ///
-    /// The output list array has the same length as the input array.
+    /// The output list array has the same length as the input array, positions of the elements
+    /// in input and output are corresponding to each other.
     ///
     /// Invalid/empty values are preserved as such.
     fn change_resolution_list(
