@@ -1,8 +1,8 @@
-use crate::array::CellIndexArray;
+use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
 use crate::error::Error;
 use h3o::{CellIndex, Resolution};
 use std::cmp::Ordering;
-use std::iter::repeat;
+use std::iter::{once, repeat};
 
 pub struct ChangedResolutionPair<T> {
     /// values before the resolution change
@@ -23,6 +23,16 @@ where
     ///
     /// Invalid/empty values are omitted.
     fn change_resolution(&self, resolution: Resolution) -> Result<Self, Error>;
+
+    /// change the H3 resolutions of all contained values to `resolution`.
+    ///
+    /// The output list array has the same length as the input array.
+    ///
+    /// Invalid/empty values are preserved as such.
+    fn change_resolution_list(
+        &self,
+        resolution: Resolution,
+    ) -> Result<H3ListArray<CellIndex>, Error>;
 
     /// change the H3 resolutions of all contained values to `resolution` and build a before-array
     /// with the input values for each after-value.
@@ -55,6 +65,37 @@ impl ChangeResolutionOp for CellIndexArray {
             .for_each(|cell| extend_with_cell(&mut out_vec, cell, resolution));
 
         Ok(out_vec.try_into().unwrap())
+    }
+
+    fn change_resolution_list(
+        &self,
+        resolution: Resolution,
+    ) -> Result<H3ListArray<CellIndex>, Error> {
+        let mut builder = H3ListArrayBuilder::<CellIndex>::with_capacity(self.len());
+
+        self.iter().for_each(|cell| match cell {
+            Some(cell) => match cell.resolution().cmp(&resolution) {
+                Ordering::Less => {
+                    builder.push_valid(cell.children(resolution));
+                }
+                Ordering::Equal => {
+                    builder.push_valid(once(cell));
+                }
+                Ordering::Greater => match cell.parent(resolution) {
+                    Some(parent_cell) => {
+                        builder.push_valid(once(parent_cell));
+                    }
+                    None => {
+                        builder.push_invalid();
+                    }
+                },
+            },
+            None => {
+                builder.push_invalid();
+            }
+        });
+
+        builder.build()
     }
 
     fn change_resolution_paired(
@@ -107,6 +148,23 @@ mod test {
                 .unset_bits(),
             0
         )
+    }
+
+    #[test]
+    fn change_resolution_list() {
+        let arr: CellIndexArray = vec![
+            Some(LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five)),
+            None,
+            Some(LatLng::new(12.3, 0.5).unwrap().to_cell(Resolution::Nine)),
+        ]
+        .into();
+
+        let list_arr = arr.change_resolution_list(Resolution::Six).unwrap();
+        assert_eq!(list_arr.len(), 3);
+
+        assert_eq!(list_arr.list_array.value(0).len(), 7);
+        assert_eq!(list_arr.list_array.value(1).len(), 0);
+        assert_eq!(list_arr.list_array.value(2).len(), 1);
     }
 
     #[test]
