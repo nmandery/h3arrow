@@ -9,6 +9,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased (YYYY-MM-DD TBD)
 * Extend documentation on ParseUtf8Array::parse_utf8array.
 * Add ChangeResolutionOp::change_resolution_list.
+* Update geozero to 0.11.
 
 ## v0.2.0 (2023-08-31)
 * Upgrade h3o from v0.3 to v0.4. Due to the new polyfill modes this lead to API breakages in the `ToCellsOptions` struct.
