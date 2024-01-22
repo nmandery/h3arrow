@@ -124,7 +124,7 @@ mod test {
     use crate::algorithm::ChangeResolutionOp;
     use crate::array::CellIndexArray;
     use ahash::HashSet;
-    use arrow2::bitmap::Bitmap;
+    use arrow::array::Array;
     use h3o::{LatLng, Resolution};
 
     #[test]
@@ -143,9 +143,9 @@ mod test {
         assert_eq!(
             arr_res_six
                 .primitive_array()
-                .validity()
-                .cloned()
-                .unwrap_or_else(Bitmap::new)
+                .nulls()
+                .map(|nullbuf| nullbuf.null_count())
+                .unwrap_or(0)
                 .unset_bits(),
             0
         )

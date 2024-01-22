@@ -1,10 +1,8 @@
 use crate::array::{CellIndexArray, H3Array, H3ListArray, H3ListArrayBuilder};
 use crate::error::Error;
 use ahash::{HashMap, HashMapExt};
-use arrow2::array::{Array, ListArray, PrimitiveArray};
-use arrow2::bitmap::{Bitmap, MutableBitmap};
-use arrow2::datatypes::DataType;
-use arrow2::offset::OffsetsBuffer;
+use arrow::array::{Array, ListArray, PrimitiveArray, UInt32Array};
+use arrow::datatypes::DataType;
 use h3o::CellIndex;
 use std::cmp::{max, min};
 use std::collections::hash_map::Entry;
@@ -13,7 +11,7 @@ use std::marker::PhantomData;
 
 pub struct GridDiskDistances {
     pub cells: H3ListArray<CellIndex>,
-    pub distances: ListArray<i64>,
+    pub distances: ListArray,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -24,7 +22,7 @@ pub enum KAggregationMethod {
 
 pub struct GridDiskAggregateK {
     pub cells: CellIndexArray,
-    pub distances: PrimitiveArray<u32>,
+    pub distances: UInt32Array,
 }
 
 pub trait GridOp
@@ -91,7 +89,7 @@ impl GridOp for H3Array<CellIndex> {
 
         Ok(GridDiskAggregateK {
             cells: CellIndexArray::from(cells),
-            distances: PrimitiveArray::from_vec(distances),
+            distances: PrimitiveArray::new(distances.into(), None),
         })
     }
 }
@@ -147,7 +145,7 @@ where
             list_array: ListArray::try_new(
                 ListArray::<i64>::default_datatype(DataType::UInt64),
                 offsets.clone(),
-                PrimitiveArray::from_vec(grid_cells).to_boxed(),
+                PrimitiveArray::new(grid_cells.into(), None).to_boxed(),
                 list_validity.clone(),
             )?,
             h3index_phantom: PhantomData::<CellIndex>,
@@ -155,7 +153,7 @@ where
         distances: ListArray::try_new(
             ListArray::<i64>::default_datatype(DataType::UInt32),
             offsets,
-            PrimitiveArray::from_vec(grid_distances).to_boxed(),
+            PrimitiveArray::new(grid_distances.into(), None).to_boxed(),
             list_validity,
         )?,
     })

@@ -1,18 +1,18 @@
 use std::mem::transmute;
 
-use arrow2::array::{Array, PrimitiveArray};
+use arrow::array::{Array, Float64Array, UInt64Array, UInt8Array};
 use h3o::Resolution;
 
 use crate::error::Error;
 
 use super::{FromIteratorWithValidity, FromWithValidity};
 
-pub struct ResolutionArray(PrimitiveArray<u8>);
+pub struct ResolutionArray(UInt8Array);
 
-impl TryFrom<PrimitiveArray<u8>> for ResolutionArray {
+impl TryFrom<UInt8Array> for ResolutionArray {
     type Error = Error;
 
-    fn try_from(value: PrimitiveArray<u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: UInt8Array) -> Result<Self, Self::Error> {
         // validate the contained h3 cells
         value
             .iter()
@@ -39,36 +39,36 @@ impl ResolutionArray {
         self.0.is_empty()
     }
 
-    pub fn slice(&mut self, offset: usize, length: usize) {
-        self.0.slice(offset, length)
+    pub fn slice(&self, offset: usize, length: usize) -> Self {
+        Self(self.0.slice(offset, length))
     }
 
-    pub fn area_rads2(&self) -> PrimitiveArray<f64> {
-        PrimitiveArray::from_iter(self.iter().map(|v| v.map(|r| r.area_rads2())))
+    pub fn area_rads2(&self) -> Float64Array {
+        Float64Array::from_iter(self.iter().map(|v| v.map(|r| r.area_rads2())))
     }
 
-    pub fn area_km2(&self) -> PrimitiveArray<f64> {
-        PrimitiveArray::from_iter(self.iter().map(|v| v.map(|r| r.area_km2())))
+    pub fn area_km2(&self) -> Float64Array {
+        Float64Array::from_iter(self.iter().map(|v| v.map(|r| r.area_km2())))
     }
 
-    pub fn area_m2(&self) -> PrimitiveArray<f64> {
-        PrimitiveArray::from_iter(self.iter().map(|v| v.map(|r| r.area_m2())))
+    pub fn area_m2(&self) -> Float64Array {
+        Float64Array::from_iter(self.iter().map(|v| v.map(|r| r.area_m2())))
     }
 
-    pub fn edge_length_rads(&self) -> PrimitiveArray<f64> {
-        PrimitiveArray::from_iter(self.iter().map(|v| v.map(|r| r.edge_length_rads())))
+    pub fn edge_length_rads(&self) -> Float64Array {
+        Float64Array::from_iter(self.iter().map(|v| v.map(|r| r.edge_length_rads())))
     }
 
-    pub fn edge_length_km(&self) -> PrimitiveArray<f64> {
-        PrimitiveArray::from_iter(self.iter().map(|v| v.map(|r| r.edge_length_km())))
+    pub fn edge_length_km(&self) -> Float64Array {
+        Float64Array::from_iter(self.iter().map(|v| v.map(|r| r.edge_length_km())))
     }
 
-    pub fn edge_length_m(&self) -> PrimitiveArray<f64> {
-        PrimitiveArray::from_iter(self.iter().map(|v| v.map(|r| r.edge_length_m())))
+    pub fn edge_length_m(&self) -> Float64Array {
+        Float64Array::from_iter(self.iter().map(|v| v.map(|r| r.edge_length_m())))
     }
 
-    pub fn cell_count(&self) -> PrimitiveArray<u64> {
-        PrimitiveArray::from_iter(self.iter().map(|v| v.map(|r| r.cell_count())))
+    pub fn cell_count(&self) -> UInt64Array {
+        UInt64Array::from_iter(self.iter().map(|v| v.map(|r| r.cell_count())))
     }
 
     /// Return the next resolution, if any.
@@ -81,14 +81,14 @@ impl ResolutionArray {
         Self::from_iter(self.iter().map(|v| v.and_then(|r| r.pred())))
     }
 
-    pub fn into_inner(self) -> PrimitiveArray<u8> {
+    pub fn into_inner(self) -> UInt8Array {
         self.0
     }
 }
 
 impl FromIterator<Resolution> for ResolutionArray {
     fn from_iter<T: IntoIterator<Item = Resolution>>(iter: T) -> Self {
-        Self(PrimitiveArray::from_iter(
+        Self(UInt8Array::from_iter(
             iter.into_iter().map(|v| Some(u8::from(v))),
         ))
     }
@@ -96,7 +96,7 @@ impl FromIterator<Resolution> for ResolutionArray {
 
 impl FromIterator<Option<Resolution>> for ResolutionArray {
     fn from_iter<T: IntoIterator<Item = Option<Resolution>>>(iter: T) -> Self {
-        Self(PrimitiveArray::from_iter(
+        Self(UInt8Array::from_iter(
             iter.into_iter().map(|v| v.map(u8::from)),
         ))
     }
@@ -114,7 +114,7 @@ impl From<Vec<Option<Resolution>>> for ResolutionArray {
     }
 }
 
-impl From<ResolutionArray> for PrimitiveArray<u8> {
+impl From<ResolutionArray> for UInt8Array {
     fn from(value: ResolutionArray) -> Self {
         value.0
     }
@@ -122,7 +122,7 @@ impl From<ResolutionArray> for PrimitiveArray<u8> {
 
 impl FromIteratorWithValidity<u8> for ResolutionArray {
     fn from_iter_with_validity<T: IntoIterator<Item = u8>>(iter: T) -> Self {
-        Self(PrimitiveArray::from_iter(
+        Self(UInt8Array::from_iter(
             iter.into_iter()
                 .map(|v| Resolution::try_from(v).ok().map(u8::from)),
         ))
@@ -131,7 +131,7 @@ impl FromIteratorWithValidity<u8> for ResolutionArray {
 
 impl FromIteratorWithValidity<Option<u8>> for ResolutionArray {
     fn from_iter_with_validity<T: IntoIterator<Item = Option<u8>>>(iter: T) -> Self {
-        Self(PrimitiveArray::from_iter(iter.into_iter().map(|v| {
+        Self(UInt8Array::from_iter(iter.into_iter().map(|v| {
             v.and_then(|v| Resolution::try_from(v).ok().map(u8::from))
         })))
     }

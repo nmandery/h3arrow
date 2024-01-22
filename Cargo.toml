@@ -20,12 +20,12 @@ spatial_index = ["dep:rstar"]
 
 [dependencies]
 ahash = "0.8"
-arrow2 = { version = "0.17", features = [] }
-geo = "0.26"
-geoarrow = { package = "geoarrow2", version = "0.0.1", optional = true, features = ["geozero"] }
+arrow = "50.0.0"
+geo = "0.27"
+geoarrow = { package = "geoarrow2", version = "0.0.2", optional = true, features = ["geozero"] }
 geo-types = "0.7"
 geozero = { version = "0.11", default-features = false, features = ["with-geo", "with-wkb"], optional = true }
-h3o = { version = "0.4", features = ["geo"] }
+h3o = { version = "0.5", features = ["geo"] }
 nom = "7"
 rayon = { version = "1", optional = true }
 thiserror = "1"

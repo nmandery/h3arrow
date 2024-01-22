@@ -1,4 +1,4 @@
-use arrow2::array::PrimitiveArray;
+use arrow::array::{Float64Array, UInt64Array};
 use h3o::{CellIndex, Resolution};
 
 use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder, ResolutionArray};
@@ -11,19 +11,19 @@ impl CellIndexArray {
             .collect()
     }
 
-    pub fn area_rads2(&self) -> PrimitiveArray<f64> {
+    pub fn area_rads2(&self) -> Float64Array {
         self.iter()
             .map(|cell| cell.map(|cell| cell.area_rads2()))
             .collect()
     }
 
-    pub fn area_km2(&self) -> PrimitiveArray<f64> {
+    pub fn area_km2(&self) -> Float64Array {
         self.iter()
             .map(|cell| cell.map(|cell| cell.area_km2()))
             .collect()
     }
 
-    pub fn area_m2(&self) -> PrimitiveArray<f64> {
+    pub fn area_m2(&self) -> Float64Array {
         self.iter()
             .map(|cell| cell.map(|cell| cell.area_m2()))
             .collect()
@@ -47,7 +47,7 @@ impl CellIndexArray {
         builder.build()
     }
 
-    pub fn children_count(&self, resolution: Resolution) -> PrimitiveArray<u64> {
+    pub fn children_count(&self, resolution: Resolution) -> UInt64Array {
         self.iter()
             .map(|cell| cell.map(|cell| cell.children_count(resolution)))
             .collect()

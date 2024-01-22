@@ -1,10 +1,14 @@
 use crate::array::to_geo::{ToLineStrings, ToLines, ToPoints, ToPolygons};
+use arrow::array::OffsetSizeTrait;
 use geo_types::Geometry;
 use geoarrow::array::{LineStringArray, PointArray, PolygonArray, WKBArray};
 
 pub trait ToGeoArrowPolygons {
     type Error;
-    fn to_geoarrow_polygons(&self, use_degrees: bool) -> Result<PolygonArray, Self::Error>;
+    fn to_geoarrow_polygons<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<PolygonArray<O>, Self::Error>;
 }
 
 impl<T> ToGeoArrowPolygons for T
@@ -13,7 +17,10 @@ where
 {
     type Error = T::Error;
 
-    fn to_geoarrow_polygons(&self, use_degrees: bool) -> Result<PolygonArray, Self::Error> {
+    fn to_geoarrow_polygons<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<PolygonArray<O>, Self::Error> {
         Ok(self.to_polygons(use_degrees)?.into())
     }
 }
@@ -35,7 +42,10 @@ where
 
 pub trait ToGeoArrowLineStrings {
     type Error;
-    fn to_geoarrow_lines(&self, use_degrees: bool) -> Result<LineStringArray, Self::Error>;
+    fn to_geoarrow_lines<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<LineStringArray<O>, Self::Error>;
 }
 
 impl<T> ToGeoArrowLineStrings for T
@@ -43,14 +53,20 @@ where
     T: ToLineStrings,
 {
     type Error = T::Error;
-    fn to_geoarrow_lines(&self, use_degrees: bool) -> Result<LineStringArray, Self::Error> {
+    fn to_geoarrow_lines<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<LineStringArray<O>, Self::Error> {
         Ok(self.to_linestrings(use_degrees)?.into())
     }
 }
 
 pub trait ToWKBPolygons {
     type Error;
-    fn to_wkb_polygons(&self, use_degrees: bool) -> Result<WKBArray, Self::Error>;
+    fn to_wkb_polygons<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<WKBArray<O>, Self::Error>;
 }
 
 impl<T> ToWKBPolygons for T
@@ -59,7 +75,10 @@ where
 {
     type Error = T::Error;
 
-    fn to_wkb_polygons(&self, use_degrees: bool) -> Result<WKBArray, Self::Error> {
+    fn to_wkb_polygons<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<WKBArray<O>, Self::Error> {
         Ok(WKBArray::from(
             self.to_polygons(use_degrees)?
                 .into_iter()
@@ -71,7 +90,10 @@ where
 
 pub trait ToWKBLines {
     type Error;
-    fn to_wkb_lines(&self, use_degrees: bool) -> Result<WKBArray, Self::Error>;
+    fn to_wkb_lines<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<WKBArray<O>, Self::Error>;
 }
 
 impl<T> ToWKBLines for T
@@ -80,7 +102,10 @@ where
 {
     type Error = T::Error;
 
-    fn to_wkb_lines(&self, use_degrees: bool) -> Result<WKBArray, Self::Error> {
+    fn to_wkb_lines<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<WKBArray<O>, Self::Error> {
         Ok(WKBArray::from(
             self.to_lines(use_degrees)?
                 .into_iter()
@@ -92,7 +117,10 @@ where
 
 pub trait ToWKBLineStrings {
     type Error;
-    fn to_wkb_linestrings(&self, use_degrees: bool) -> Result<WKBArray, Self::Error>;
+    fn to_wkb_linestrings<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<WKBArray<O>, Self::Error>;
 }
 
 impl<T> ToWKBLineStrings for T
@@ -101,7 +129,10 @@ where
 {
     type Error = T::Error;
 
-    fn to_wkb_linestrings(&self, use_degrees: bool) -> Result<WKBArray, Self::Error> {
+    fn to_wkb_linestrings<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<WKBArray<O>, Self::Error> {
         Ok(WKBArray::from(
             self.to_linestrings(use_degrees)?
                 .into_iter()
@@ -113,7 +144,10 @@ where
 
 pub trait ToWKBPoints {
     type Error;
-    fn to_wkb_points(&self, use_degrees: bool) -> Result<WKBArray, Self::Error>;
+    fn to_wkb_points<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<WKBArray<O>, Self::Error>;
 }
 
 impl<T> ToWKBPoints for T
@@ -122,7 +156,10 @@ where
 {
     type Error = T::Error;
 
-    fn to_wkb_points(&self, use_degrees: bool) -> Result<WKBArray, Self::Error> {
+    fn to_wkb_points<O: OffsetSizeTrait>(
+        &self,
+        use_degrees: bool,
+    ) -> Result<WKBArray<O>, Self::Error> {
         Ok(WKBArray::from(
             self.to_points(use_degrees)?
                 .into_iter()

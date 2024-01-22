@@ -1,6 +1,6 @@
 use crate::array::CellIndexArray;
 use crate::error::Error;
-use arrow2::array::Float64Array;
+use arrow::array::Float64Array;
 use h3o::LatLng;
 
 pub struct CoordinateArrays {
