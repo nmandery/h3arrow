@@ -213,37 +213,45 @@ where
             .map(|geom| geom.map(|geom| to_cells(geom, options, vec![])).transpose())
             .collect::<Result<Vec<_>, _>>()?;
 
-        let uint64_capacity: usize = cell_vecs
-            .iter()
-            .map(|cells| cells.map(Vec::len).unwrap_or(0))
-            .sum();
-
-        let mut builder = GenericListBuilder::with_capacity(
-            UInt64Builder::with_capacity(uint64_capacity),
-            cell_vecs.len(),
-        );
-
-        for cells in cell_vecs.into_iter() {
-            let is_valid = if let Some(cells) = cells {
-                cells
-                    .into_iter()
-                    .for_each(|cell| builder.values().append_value(u64::from(cell)));
-                true
-            } else {
-                builder.push_invalid();
-                false
-            };
-            builder.append(is_valid);
-        }
-        genericlistarray_to_h3listarray_unvalidated(builder.finish())
+        cell_vecs_to_h3listarray(cell_vecs)
     }
 }
 
-impl<T> IterToCellListArray for T
+pub(crate) fn cell_vecs_to_h3listarray<O: OffsetSizeTrait>(
+    cell_vecs: Vec<Option<Vec<CellIndex>>>,
+) -> Result<H3ListArray<CellIndex, O>, Error> {
+    let uint64_capacity: usize = cell_vecs
+        .iter()
+        .map(|cells| cells.map(|v| v.len()).unwrap_or(0))
+        .sum();
+
+    let mut builder = GenericListBuilder::with_capacity(
+        UInt64Builder::with_capacity(uint64_capacity),
+        cell_vecs.len(),
+    );
+
+    for cells in cell_vecs.into_iter() {
+        let is_valid = if let Some(cells) = cells {
+            cells
+                .into_iter()
+                .for_each(|cell| builder.values().append_value(u64::from(cell)));
+            true
+        } else {
+            false
+        };
+        builder.append(is_valid);
+    }
+    genericlistarray_to_h3listarray_unvalidated(builder.finish())
+}
+
+impl<T, O: OffsetSizeTrait> IterToCellListArray<O> for T
 where
     T: Iterator<Item = Option<Geometry>>,
 {
-    fn to_celllistarray(self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
+    fn to_celllistarray(
+        self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
         let mut builder =
             GenericListBuilder::with_capacity(UInt64Builder::new(), self.size_hint().0);
 

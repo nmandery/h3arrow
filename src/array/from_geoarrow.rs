@@ -1,5 +1,6 @@
 use super::from_geo::{
-    IterToCellIndexArray, IterToCellListArray, ToCellIndexArray, ToCellListArray, ToCellsOptions,
+    cell_vecs_to_h3listarray, IterToCellIndexArray, IterToCellListArray, ToCellIndexArray,
+    ToCellListArray, ToCellsOptions,
 };
 use crate::algorithm::CompactOp;
 use crate::array::from_geo::geometry_to_cells;
@@ -83,15 +84,7 @@ impl<O: OffsetSizeTrait> ToCellListArray<O> for WKBArray<O> {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
-        for cells in cell_vecs.into_iter() {
-            if let Some(cells) = cells {
-                builder.push_valid(cells.into_iter())
-            } else {
-                builder.push_invalid()
-            }
-        }
-        builder.build()
+        cell_vecs_to_h3listarray(cell_vecs)
     }
 }
 

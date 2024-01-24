@@ -1,4 +1,3 @@
-use arrow::bitmap::{Bitmap, MutableBitmap};
 use geo::{BoundingRect, Intersects};
 use geo_types::{Coord, MultiPolygon, Polygon, Rect};
 use h3o::geom::ToGeo;
