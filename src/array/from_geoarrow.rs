@@ -71,7 +71,7 @@ impl<O: OffsetSizeTrait> ToCellListArray<O> for WKBArray<O> {
         options: &ToCellsOptions,
     ) -> Result<H3ListArray<CellIndex, O>, Error> {
         #[cfg(not(feature = "rayon"))]
-        let pos_iter = (0..self.len()).into_iter();
+        let pos_iter = 0..self.len();
 
         #[cfg(feature = "rayon")]
         let pos_iter = (0..self.len()).into_par_iter();

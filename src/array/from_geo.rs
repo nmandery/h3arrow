@@ -222,7 +222,7 @@ pub(crate) fn cell_vecs_to_h3listarray<O: OffsetSizeTrait>(
 ) -> Result<H3ListArray<CellIndex, O>, Error> {
     let uint64_capacity: usize = cell_vecs
         .iter()
-        .map(|cells| cells.map(|v| v.len()).unwrap_or(0))
+        .map(|cells| cells.as_ref().map(|v| v.len()).unwrap_or(0))
         .sum();
 
     let mut builder = GenericListBuilder::with_capacity(
@@ -285,11 +285,14 @@ where
 }
 
 #[cfg(not(feature = "rayon"))]
-impl<T> ToCellListArray for &[T]
+impl<T, O: OffsetSizeTrait> ToCellListArray<O> for &[T]
 where
     T: ToClonedGeometry,
 {
-    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
+    fn to_celllistarray(
+        &self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
         self.iter()
             .map(|g| g.to_cloned_geometry())
             .to_celllistarray(options)
