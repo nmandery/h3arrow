@@ -1,6 +1,6 @@
 use std::mem::transmute;
 
-use arrow::array::{Array, Float64Array, UInt64Array, UInt8Array};
+use arrow::array::{Float64Array, UInt64Array, UInt8Array};
 use h3o::Resolution;
 
 use crate::error::Error;
@@ -17,7 +17,7 @@ impl TryFrom<UInt8Array> for ResolutionArray {
         value
             .iter()
             .flatten()
-            .try_for_each(|h3index| Resolution::try_from(*h3index).map(|_| ()))?;
+            .try_for_each(|h3index| Resolution::try_from(h3index).map(|_| ()))?;
         Ok(Self(value))
     }
 }
@@ -28,7 +28,7 @@ impl ResolutionArray {
         // as the array contents have been validated upon construction, we just transmute to the h3o type
         self.0
             .iter()
-            .map(|v| v.map(|resolution_u8| unsafe { transmute::<u8, Resolution>(*resolution_u8) }))
+            .map(|v| v.map(|resolution_u8| unsafe { transmute::<u8, Resolution>(resolution_u8) }))
     }
 
     pub fn len(&self) -> usize {

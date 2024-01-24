@@ -1,8 +1,9 @@
-use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
+use crate::array::{genericlistarray_to_h3listarray_unvalidated, CellIndexArray, H3ListArray};
 use crate::error::Error;
+use arrow::array::{GenericListBuilder, UInt64Builder};
 use h3o::{CellIndex, Resolution};
 use std::cmp::Ordering;
-use std::iter::{once, repeat};
+use std::iter::repeat;
 
 pub struct ChangedResolutionPair<T> {
     /// values before the resolution change
@@ -65,38 +66,40 @@ impl ChangeResolutionOp for CellIndexArray {
             .flatten()
             .for_each(|cell| extend_with_cell(&mut out_vec, cell, resolution));
 
-        Ok(out_vec.try_into().unwrap())
+        Ok(out_vec.into())
     }
 
     fn change_resolution_list(
         &self,
         resolution: Resolution,
     ) -> Result<H3ListArray<CellIndex>, Error> {
-        let mut builder = H3ListArrayBuilder::<CellIndex>::with_capacity(self.len());
+        let mut builder = GenericListBuilder::with_capacity(UInt64Builder::new(), self.len());
 
         self.iter().for_each(|cell| match cell {
             Some(cell) => match cell.resolution().cmp(&resolution) {
                 Ordering::Less => {
-                    builder.push_valid(cell.children(resolution));
+                    cell.children(resolution)
+                        .for_each(|child| builder.values().append_value(u64::from(child)));
+                    builder.append(true)
                 }
                 Ordering::Equal => {
-                    builder.push_valid(once(cell));
+                    builder.values().append_value(u64::from(cell));
+                    builder.append(true)
                 }
                 Ordering::Greater => match cell.parent(resolution) {
                     Some(parent_cell) => {
-                        builder.push_valid(once(parent_cell));
+                        builder.values().append_value(u64::from(parent_cell));
+                        builder.append(true)
                     }
-                    None => {
-                        builder.push_invalid();
-                    }
+                    None => builder.append(false),
                 },
             },
             None => {
-                builder.push_invalid();
+                builder.append(false);
             }
         });
 
-        builder.build()
+        genericlistarray_to_h3listarray_unvalidated(builder.finish())
     }
 
     fn change_resolution_paired(
@@ -113,8 +116,8 @@ impl ChangeResolutionOp for CellIndexArray {
         });
 
         Ok(ChangedResolutionPair {
-            before: before_vec.try_into().unwrap(),
-            after: after_vec.try_into().unwrap(),
+            before: before_vec.into(),
+            after: after_vec.into(),
         })
     }
 }
@@ -145,8 +148,7 @@ mod test {
                 .primitive_array()
                 .nulls()
                 .map(|nullbuf| nullbuf.null_count())
-                .unwrap_or(0)
-                .unset_bits(),
+                .unwrap_or(0),
             0
         )
     }

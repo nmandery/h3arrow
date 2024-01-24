@@ -1,3 +1,4 @@
+use arrow::array::{GenericListBuilder, UInt64Builder};
 use geo_types::*;
 use h3o::geom::{ContainmentMode, PolyfillConfig, ToCells};
 use h3o::{CellIndex, Resolution};
@@ -5,7 +6,7 @@ use h3o::{CellIndex, Resolution};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 use crate::array::list::H3ListArray;
-use crate::array::{CellIndexArray, H3ListArrayBuilder};
+use crate::array::{genericlistarray_to_h3listarray_unvalidated, CellIndexArray};
 use crate::error::Error;
 
 #[derive(Clone, Copy, Debug)]
@@ -224,16 +225,20 @@ where
     T: Iterator<Item = Option<Geometry>>,
 {
     fn to_celllistarray(self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
-        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
+        let mut builder =
+            GenericListBuilder::with_capacity(UInt64Builder::new(), self.size_hint().0);
 
         for geom in self {
             if let Some(geom) = geom {
-                builder.push_valid(to_cells(geom, options, vec![])?.into_iter());
+                geometry_to_cells(&geom, options)?
+                    .into_iter()
+                    .for_each(|cell| builder.values().append_value(u64::from(cell)));
+                builder.append(true);
             } else {
-                builder.push_invalid();
+                builder.append(false);
             }
         }
-        builder.build()
+        genericlistarray_to_h3listarray_unvalidated(builder.finish())
     }
 }
 

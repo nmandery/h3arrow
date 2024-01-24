@@ -1,7 +1,9 @@
-use arrow::array::{Float64Array, UInt64Array};
+use arrow::array::{Float64Array, GenericListBuilder, UInt64Array, UInt64Builder};
 use h3o::{CellIndex, Resolution};
 
-use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder, ResolutionArray};
+use crate::array::{
+    genericlistarray_to_h3listarray_unvalidated, CellIndexArray, H3ListArray, ResolutionArray,
+};
 use crate::error::Error;
 
 impl CellIndexArray {
@@ -36,15 +38,18 @@ impl CellIndexArray {
     }
 
     pub fn children(&self, resolution: Resolution) -> Result<H3ListArray<CellIndex>, Error> {
-        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
+        let mut builder = GenericListBuilder::with_capacity(UInt64Builder::new(), self.len());
+
         for value in self.iter() {
             if let Some(cell) = value {
-                builder.push_valid(cell.children(resolution))
+                cell.children(resolution)
+                    .for_each(|child| builder.values().append_value(u64::from(child)));
+                builder.append(true);
             } else {
-                builder.push_invalid()
+                builder.append(false);
             }
         }
-        builder.build()
+        genericlistarray_to_h3listarray_unvalidated(builder.finish())
     }
 
     pub fn children_count(&self, resolution: Resolution) -> UInt64Array {

@@ -1,17 +1,19 @@
-use crate::array::{CellIndexArray, H3Array, H3ListArray, H3ListArrayBuilder};
+use crate::array::{
+    genericlistarray_to_h3listarray_unvalidated, CellIndexArray, H3Array, H3ListArray,
+};
 use crate::error::Error;
 use ahash::{HashMap, HashMapExt};
-use arrow::array::{Array, ListArray, PrimitiveArray, UInt32Array};
-use arrow::datatypes::DataType;
-use h3o::CellIndex;
+use arrow::array::{
+    Array, GenericListArray, GenericListBuilder, OffsetSizeTrait, PrimitiveArray, UInt32Array,
+    UInt32Builder, UInt64Builder,
+};
+use h3o::{max_grid_disk_size, CellIndex};
 use std::cmp::{max, min};
 use std::collections::hash_map::Entry;
-use std::default::Default;
-use std::marker::PhantomData;
 
-pub struct GridDiskDistances {
-    pub cells: H3ListArray<CellIndex>,
-    pub distances: ListArray,
+pub struct GridDiskDistances<O: OffsetSizeTrait> {
+    pub cells: H3ListArray<CellIndex, O>,
+    pub distances: GenericListArray<O>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -29,9 +31,16 @@ pub trait GridOp
 where
     Self: Sized,
 {
-    fn grid_disk(&self, k: u32) -> Result<H3ListArray<CellIndex>, Error>;
-    fn grid_disk_distances(&self, k: u32) -> Result<GridDiskDistances, Error>;
-    fn grid_ring_distances(&self, k_min: u32, k_max: u32) -> Result<GridDiskDistances, Error>;
+    fn grid_disk<O: OffsetSizeTrait>(&self, k: u32) -> Result<H3ListArray<CellIndex, O>, Error>;
+    fn grid_disk_distances<O: OffsetSizeTrait>(
+        &self,
+        k: u32,
+    ) -> Result<GridDiskDistances<O>, Error>;
+    fn grid_ring_distances<O: OffsetSizeTrait>(
+        &self,
+        k_min: u32,
+        k_max: u32,
+    ) -> Result<GridDiskDistances<O>, Error>;
     fn grid_disk_aggregate_k(
         &self,
         k: u32,
@@ -40,20 +49,41 @@ where
 }
 
 impl GridOp for H3Array<CellIndex> {
-    fn grid_disk(&self, k: u32) -> Result<H3ListArray<CellIndex>, Error> {
-        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
-        builder.extend(
-            self.iter()
-                .map(|cell| cell.map(|cell| cell.grid_disk::<Vec<_>>(k))),
+    fn grid_disk<O: OffsetSizeTrait>(&self, k: u32) -> Result<H3ListArray<CellIndex, O>, Error> {
+        let mut builder = GenericListBuilder::with_capacity(
+            UInt64Builder::with_capacity(self.len() * max_grid_disk_size(k) as usize),
+            self.len(),
         );
-        builder.build()
+
+        for cell in self.iter() {
+            match cell {
+                Some(cell) => {
+                    let disc: Vec<_> = cell.grid_disk(k);
+                    for disc_cell in disc {
+                        builder.values().append_value(u64::from(disc_cell));
+                    }
+                    builder.append(true);
+                }
+                None => {
+                    builder.append(false);
+                }
+            }
+        }
+        genericlistarray_to_h3listarray_unvalidated(builder.finish())
     }
 
-    fn grid_disk_distances(&self, k: u32) -> Result<GridDiskDistances, Error> {
+    fn grid_disk_distances<O: OffsetSizeTrait>(
+        &self,
+        k: u32,
+    ) -> Result<GridDiskDistances<O>, Error> {
         build_grid_disk(self, k, |_, _| true)
     }
 
-    fn grid_ring_distances(&self, k_min: u32, k_max: u32) -> Result<GridDiskDistances, Error> {
+    fn grid_ring_distances<O: OffsetSizeTrait>(
+        &self,
+        k_min: u32,
+        k_max: u32,
+    ) -> Result<GridDiskDistances<O>, Error> {
         build_grid_disk(self, k_max, |_, k| k >= k_min)
     }
 
@@ -94,67 +124,56 @@ impl GridOp for H3Array<CellIndex> {
     }
 }
 
-fn build_grid_disk<F>(
+fn build_grid_disk<F, O: OffsetSizeTrait>(
     cellindexarray: &CellIndexArray,
     k: u32,
     filter: F,
-) -> Result<GridDiskDistances, Error>
+) -> Result<GridDiskDistances<O>, Error>
 where
     F: Fn(CellIndex, u32) -> bool,
 {
-    let mut grid_cells = Vec::with_capacity(cellindexarray.len());
-    let mut grid_distances = Vec::with_capacity(cellindexarray.len());
-    let mut offsets = Vec::with_capacity(cellindexarray.len());
-    let mut list_validity = Vec::with_capacity(cellindexarray.len());
+    let mut grid_cells_builder = GenericListBuilder::with_capacity(
+        UInt64Builder::with_capacity(
+            cellindexarray.len(), // TODO: multiply with k or k_max-k_min
+        ),
+        cellindexarray.len(),
+    );
+    let mut grid_distancess_builder = GenericListBuilder::with_capacity(
+        UInt32Builder::with_capacity(
+            cellindexarray.len(), // TODO: multiply with k or k_max-k_min
+        ),
+        cellindexarray.len(),
+    );
 
     for cell in cellindexarray.iter() {
-        offsets.push(grid_cells.len() as i64);
-        match cell {
+        let is_valid = match cell {
             Some(cell) => {
-                list_validity.push(true);
-
                 for (grid_cell, grid_distance) in cell.grid_disk_distances::<Vec<_>>(k).into_iter()
                 {
                     if filter(grid_cell, grid_distance) {
-                        grid_cells.push(u64::from(grid_cell));
-                        grid_distances.push(grid_distance);
+                        grid_cells_builder
+                            .values()
+                            .append_value(u64::from(grid_cell));
+                        grid_distancess_builder.values().append_value(grid_distance);
                     }
                 }
+
+                true
             }
-            None => {
-                list_validity.push(false);
-            }
-        }
+            None => false,
+        };
+
+        grid_cells_builder.append(is_valid);
+        grid_distancess_builder.append(is_valid)
     }
+
+    let grid_cells = grid_cells_builder.finish();
+    let grid_distances = grid_distancess_builder.finish();
 
     debug_assert_eq!(grid_cells.len(), grid_distances.len());
 
-    offsets.push(grid_cells.len() as i64);
-    let offsets: OffsetsBuffer<i64> = offsets.try_into()?;
-    let list_validity = {
-        let validity: Bitmap = MutableBitmap::from_iter(list_validity).into();
-        if validity.unset_bits() == 0 {
-            None
-        } else {
-            Some(validity)
-        }
-    };
-
     Ok(GridDiskDistances {
-        cells: H3ListArray {
-            list_array: ListArray::try_new(
-                ListArray::<i64>::default_datatype(DataType::UInt64),
-                offsets.clone(),
-                PrimitiveArray::new(grid_cells.into(), None).to_boxed(),
-                list_validity.clone(),
-            )?,
-            h3index_phantom: PhantomData::<CellIndex>,
-        },
-        distances: ListArray::try_new(
-            ListArray::<i64>::default_datatype(DataType::UInt32),
-            offsets,
-            PrimitiveArray::new(grid_distances.into(), None).to_boxed(),
-            list_validity,
-        )?,
+        cells: genericlistarray_to_h3listarray_unvalidated(grid_cells)?,
+        distances: grid_distances,
     })
 }

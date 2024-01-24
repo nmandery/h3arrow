@@ -1,8 +1,8 @@
 use crate::array::{H3Array, H3IndexArrayValue};
 use crate::error::Error;
-use arrow::array::{Array, ListArray, PrimitiveArray, UInt64Array};
+use arrow::array::{Array, UInt64Array};
 use arrow::array::{GenericListArray, OffsetSizeTrait};
-use arrow::datatypes::{ArrowNativeType, ArrowPrimitiveType, DataType};
+use arrow::datatypes::DataType;
 use std::marker::PhantomData;
 
 pub struct H3ListArray<IX, O: OffsetSizeTrait = i64> {
@@ -45,33 +45,64 @@ where
         self.list_array
             .values()
             .as_any()
-            .downcast_ref::<PrimitiveArray<u64>>()
+            .downcast_ref::<UInt64Array>()
             // TODO: this should already be validated. unwrap/expect?
             .ok_or(Error::NotAUint64Array)
             .and_then(|pa| pa.clone().try_into())
     }
+
+    pub(crate) fn from_genericlistarray_unvalidated(
+        value: GenericListArray<O>,
+    ) -> Result<H3ListArray<IX, O>, Error> {
+        if value.data_type() != &DataType::UInt64 {
+            return Err(Error::NotAUint64Array);
+        }
+
+        Ok(Self {
+            list_array: value,
+            h3index_phantom: PhantomData::<IX>,
+        })
+    }
 }
 
+/*
 impl<IX, O: OffsetSizeTrait> From<H3ListArray<IX>> for GenericListArray<O> {
     fn from(value: H3ListArray<IX, O>) -> Self {
         value.list_array
     }
 }
 
+ */
+
+pub(crate) fn genericlistarray_to_h3listarray_unvalidated<IX, O: OffsetSizeTrait>(
+    value: GenericListArray<O>,
+) -> Result<H3ListArray<IX, O>, Error> {
+    let nested_datatype = match value.data_type() {
+        DataType::List(field_ref) => field_ref.data_type().clone(),
+        DataType::LargeList(field_ref) => field_ref.data_type().clone(),
+        _ => return Err(Error::NotAUint64Array),
+    };
+    if !nested_datatype.equals_datatype(&DataType::UInt64) {
+        return Err(Error::NotAUint64Array);
+    }
+
+    Ok(H3ListArray {
+        list_array: value,
+        h3index_phantom: PhantomData::<IX>,
+    })
+}
+
 impl<IX, O: OffsetSizeTrait> TryFrom<GenericListArray<O>> for H3ListArray<IX, O>
 where
     IX: H3IndexArrayValue,
-    H3Array<IX>: TryFrom<PrimitiveArray<O>, Error = Error>,
+    H3Array<IX>: TryFrom<UInt64Array, Error = Error>,
 {
     type Error = Error;
 
     fn try_from(value: GenericListArray<O>) -> Result<Self, Self::Error> {
-        let instance = Self {
-            list_array: value,
-            h3index_phantom: PhantomData::<IX>,
-        };
+        let instance = Self::from_genericlistarray_unvalidated(value)?;
 
-        // validate
+        // validate all values
         for a in instance.iter_arrays().flatten() {
             let _ = a?;
         }
@@ -193,10 +224,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    /*
     //use crate::array::H3ListArrayBuilder;
     use h3o::{CellIndex, LatLng, Resolution};
 
-    /*
     #[test]
     fn construct() {
         let cell = LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five);

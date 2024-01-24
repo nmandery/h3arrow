@@ -114,7 +114,7 @@ where
     /// iff `i >= self.len()`
     pub fn get(&self, i: usize) -> Option<IX> {
         if self.primitive_array.is_valid(i) {
-            Some(self.primitive_array.value(i).map(IX::transmute_from_u64))
+            Some(IX::transmute_from_u64(self.primitive_array.value(i)))
         } else {
             None
         }
@@ -148,8 +148,8 @@ where
         // validate the contained h3 cells
         value
             .iter()
-            .flatten() // TODO: this should not flatten
-            .try_for_each(|h3index| IX::try_from(*h3index).map(|_| ()))?;
+            .flatten() // TODO: should this really flatten or preserve unset positions?
+            .try_for_each(|h3index| IX::try_from(h3index).map(|_| ()))?;
         Ok(H3Array {
             primitive_array: value,
             h3index_phantom: PhantomData::<IX>,
@@ -280,6 +280,6 @@ where
     IX: H3IndexArrayValue,
 {
     fn from_with_validity(value: UInt64Array) -> Self {
-        Self::from_iter_with_validity(value.iter().map(|v| v.copied()))
+        Self::from_iter_with_validity(value.iter())
     }
 }

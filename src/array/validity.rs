@@ -35,6 +35,6 @@ where
     T: FromIteratorWithValidity<Option<u64>>,
 {
     fn from_with_validity(value: UInt64Array) -> Self {
-        Self::from_iter_with_validity(value.iter().map(|v| v.copied()))
+        Self::from_iter_with_validity(value.iter())
     }
 }
