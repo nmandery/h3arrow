@@ -20,7 +20,7 @@ spatial_index = ["dep:rstar"]
 
 [dependencies]
 ahash = "0.8"
-arrow = "50.0.0"
+arrow = "49.0.0"
 geo = "0.27"
 geoarrow = { package = "geoarrow2", version = "0.0.2", optional = true, features = ["geozero"] }
 geo-types = "0.7"

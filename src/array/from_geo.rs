@@ -1,4 +1,4 @@
-use arrow::array::{GenericListBuilder, UInt64Builder};
+use arrow::array::{GenericListBuilder, OffsetSizeTrait, UInt64Builder};
 use geo_types::*;
 use h3o::geom::{ContainmentMode, PolyfillConfig, ToCells};
 use h3o::{CellIndex, Resolution};
@@ -180,43 +180,62 @@ where
     }
 }
 
-pub trait ToCellListArray {
-    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error>;
+pub trait ToCellListArray<O: OffsetSizeTrait> {
+    fn to_celllistarray(
+        &self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error>;
 }
 
-pub(crate) trait IterToCellListArray {
-    fn to_celllistarray(self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error>;
+pub(crate) trait IterToCellListArray<O: OffsetSizeTrait> {
+    fn to_celllistarray(self, options: &ToCellsOptions)
+        -> Result<H3ListArray<CellIndex, O>, Error>;
 }
 
 #[cfg(feature = "rayon")]
-trait ParIterToCellListArray {
+trait ParIterToCellListArray<O: OffsetSizeTrait> {
     fn par_to_celllistarray(
         self,
         options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndex>, Error>;
+    ) -> Result<H3ListArray<CellIndex, O>, Error>;
 }
 
 #[cfg(feature = "rayon")]
-impl<T> ParIterToCellListArray for T
+impl<T, O: OffsetSizeTrait> ParIterToCellListArray<O> for T
 where
     T: ParallelIterator<Item = Option<Geometry>>,
 {
     fn par_to_celllistarray(
         self,
         options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndex>, Error> {
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
         let cell_vecs = self
             .map(|geom| geom.map(|geom| to_cells(geom, options, vec![])).transpose())
             .collect::<Result<Vec<_>, _>>()?;
-        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
+
+        let uint64_capacity: usize = cell_vecs
+            .iter()
+            .map(|cells| cells.map(Vec::len).unwrap_or(0))
+            .sum();
+
+        let mut builder = GenericListBuilder::with_capacity(
+            UInt64Builder::with_capacity(uint64_capacity),
+            cell_vecs.len(),
+        );
+
         for cells in cell_vecs.into_iter() {
-            if let Some(cells) = cells {
-                builder.push_valid(cells.into_iter());
+            let is_valid = if let Some(cells) = cells {
+                cells
+                    .into_iter()
+                    .for_each(|cell| builder.values().append_value(u64::from(cell)));
+                true
             } else {
                 builder.push_invalid();
-            }
+                false
+            };
+            builder.append(is_valid);
         }
-        builder.build()
+        genericlistarray_to_h3listarray_unvalidated(builder.finish())
     }
 }
 
@@ -243,11 +262,14 @@ where
 }
 
 #[cfg(feature = "rayon")]
-impl<T> ToCellListArray for &[T]
+impl<T, O: OffsetSizeTrait> ToCellListArray<O> for &[T]
 where
     T: ToClonedGeometry + Sync,
 {
-    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
+    fn to_celllistarray(
+        &self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
         self.into_par_iter()
             .map(|g| g.to_cloned_geometry())
             .par_to_celllistarray(options)
