@@ -1,3 +1,4 @@
+use arrow::array::{Array, BooleanArray, BooleanBufferBuilder};
 use geo::{BoundingRect, Intersects};
 use geo_types::{Coord, MultiPolygon, Polygon, Rect};
 use h3o::geom::ToGeo;
@@ -101,67 +102,79 @@ impl<IX> SpatialIndex<IX>
 where
     IX: H3IndexArrayValue + RectIndexable,
 {
-    fn intersect_impl<F>(&self, rect: &Rect, mask: &mut MutableBitmap, detailed_check: F)
+    fn intersect_impl<F>(&self, rect: &Rect, builder: &mut BooleanBufferBuilder, detailed_check: F)
     where
         F: Fn(IX) -> bool,
     {
-        debug_assert_eq!(mask.len(), self.array.len());
+        debug_assert_eq!(builder.capacity(), self.array.len());
 
         let envelope = AABB::from_corners(to_coord(rect.min()), to_coord(rect.max()));
         let locator = self.rtree.locate_in_envelope_intersecting(&envelope);
         for located_array_position in locator {
             if let Some(value) = self.array.get(located_array_position.data) {
-                if !mask.get(located_array_position.data) && detailed_check(value) {
-                    mask.set(located_array_position.data, true);
+                if !builder.get_bit(located_array_position.data) {
+                    builder.set_bit(located_array_position.data, detailed_check(value))
                 }
             }
         }
     }
 
-    pub fn intersect_envelopes(&self, rect: &Rect) -> Bitmap {
-        let mut mask = negative_mask(self.array.len());
-        self.intersect_impl(rect, &mut mask, |_| true);
-        mask.into()
+    fn finish_bufferbuilder(&self, mut builder: BooleanBufferBuilder) -> BooleanArray {
+        BooleanArray::new(
+            builder.finish(),
+            self.array.primitive_array().nulls().cloned(),
+        )
     }
 
-    pub fn intersect_polygon(&self, poly: &Polygon) -> Bitmap {
-        let mut mask = negative_mask(self.array.len());
+    pub fn intersect_envelopes(&self, rect: &Rect) -> BooleanArray {
+        let mut builder = negative_mask(self.array.len());
+        self.intersect_impl(rect, &mut builder, |_| true);
+        self.finish_bufferbuilder(builder)
+    }
+
+    pub fn intersect_polygon(&self, poly: &Polygon) -> BooleanArray {
+        let mut builder = negative_mask(self.array.len());
         if let Some(poly_rect) = poly.bounding_rect() {
-            self.intersect_impl(&poly_rect, &mut mask, |ix| ix.intersects_with_polygon(poly))
+            self.intersect_impl(&poly_rect, &mut builder, |ix| {
+                ix.intersects_with_polygon(poly)
+            });
         }
-        mask.into()
+        self.finish_bufferbuilder(builder)
     }
 
-    pub fn intersect_multipolygon(&self, mpoly: &MultiPolygon) -> Bitmap {
-        let mut mask = negative_mask(self.array.len());
+    pub fn intersect_multipolygon(&self, mpoly: &MultiPolygon) -> BooleanArray {
+        let mut builder = negative_mask(self.array.len());
         for poly in mpoly.iter() {
             if let Some(poly_rect) = poly.bounding_rect() {
-                self.intersect_impl(&poly_rect, &mut mask, |ix| ix.intersects_with_polygon(poly))
+                self.intersect_impl(&poly_rect, &mut builder, |ix| {
+                    ix.intersects_with_polygon(poly)
+                })
             }
         }
-        mask.into()
+        self.finish_bufferbuilder(builder)
     }
 
     /// The envelope of the indexed elements is with `distance` of the given [Coord] `coord`.
-    pub fn envelopes_within_distance(&self, coord: Coord, distance: f64) -> Bitmap {
-        let mut mask = negative_mask(self.array.len());
+    pub fn envelopes_within_distance(&self, coord: Coord, distance: f64) -> BooleanArray {
+        let mut builder = negative_mask(self.array.len());
         let locator = self.rtree.locate_within_distance(to_coord(coord), distance);
         for located_array_position in locator {
-            mask.set(located_array_position.data, true);
+            builder.set_bit(located_array_position.data, true);
         }
 
-        mask.into()
+        self.finish_bufferbuilder(builder)
     }
 }
 
-pub(crate) fn negative_mask(size: usize) -> MutableBitmap {
-    let mut mask = MutableBitmap::new();
-    mask.extend_constant(size, false);
-    mask
+pub(crate) fn negative_mask(size: usize) -> BooleanBufferBuilder {
+    let mut builder = BooleanBufferBuilder::new(size);
+    (0..size).for_each(|pos| builder.set_bit(pos, false));
+    builder
 }
 
 #[cfg(test)]
 mod tests {
+    use arrow::array::{Array, Datum};
     use geo_types::{coord, polygon};
     use h3o::{LatLng, Resolution};
 
@@ -197,10 +210,18 @@ mod tests {
         let mask = idx.envelopes_within_distance((-60.0, -60.0).into(), 2.0);
 
         assert_eq!(mask.len(), 4);
-        assert_eq!(mask.get(0), Some(false));
-        assert_eq!(mask.get(1), Some(true));
-        assert_eq!(mask.get(2), Some(false));
-        assert_eq!(mask.get(3), Some(false));
+
+        assert!(mask.is_valid(0));
+        assert_eq!(mask.value(0), false);
+
+        assert!(mask.is_valid(1));
+        assert_eq!(mask.value(1), true);
+
+        assert!(mask.is_valid(2));
+        assert_eq!(mask.value(2), false);
+
+        assert!(mask.is_valid(3));
+        assert_eq!(mask.value(3), false);
     }
 
     #[test]
@@ -215,9 +236,17 @@ mod tests {
                 ], interiors: []));
 
         assert_eq!(mask.len(), 4);
-        assert_eq!(mask.get(0), Some(true));
-        assert_eq!(mask.get(1), Some(false));
-        assert_eq!(mask.get(2), Some(false));
-        assert_eq!(mask.get(3), Some(false));
+
+        assert!(mask.is_valid(0));
+        assert_eq!(mask.value(0), true);
+
+        assert!(mask.is_valid(1));
+        assert_eq!(mask.value(1), false);
+
+        assert!(mask.is_valid(2));
+        assert_eq!(mask.value(2), false);
+
+        assert!(mask.is_valid(3));
+        assert_eq!(mask.value(3), false);
     }
 }
