@@ -1,11 +1,9 @@
-use crate::array::{
-    genericlistarray_to_h3listarray_unvalidated, CellIndexArray, H3Array, H3ListArray,
-};
+use crate::array::{CellIndexArray, H3Array, H3ListArray, H3ListArrayBuilder};
 use crate::error::Error;
 use ahash::{HashMap, HashMapExt};
 use arrow::array::{
     Array, GenericListArray, GenericListBuilder, OffsetSizeTrait, PrimitiveArray, UInt32Array,
-    UInt32Builder, UInt64Builder,
+    UInt32Builder,
 };
 use h3o::{max_grid_disk_size, CellIndex};
 use std::cmp::{max, min};
@@ -50,18 +48,16 @@ where
 
 impl GridOp for H3Array<CellIndex> {
     fn grid_disk<O: OffsetSizeTrait>(&self, k: u32) -> Result<H3ListArray<CellIndex, O>, Error> {
-        let mut builder = GenericListBuilder::with_capacity(
-            UInt64Builder::with_capacity(self.len() * max_grid_disk_size(k) as usize),
+        let mut builder = H3ListArrayBuilder::with_capacity(
             self.len(),
+            self.len() * max_grid_disk_size(k) as usize,
         );
 
         for cell in self.iter() {
             match cell {
                 Some(cell) => {
                     let disc: Vec<_> = cell.grid_disk(k);
-                    for disc_cell in disc {
-                        builder.values().append_value(u64::from(disc_cell));
-                    }
+                    builder.values().append_many(disc);
                     builder.append(true);
                 }
                 None => {
@@ -69,7 +65,7 @@ impl GridOp for H3Array<CellIndex> {
                 }
             }
         }
-        genericlistarray_to_h3listarray_unvalidated(builder.finish())
+        builder.finish()
     }
 
     fn grid_disk_distances<O: OffsetSizeTrait>(
@@ -132,11 +128,9 @@ fn build_grid_disk<F, O: OffsetSizeTrait>(
 where
     F: Fn(CellIndex, u32) -> bool,
 {
-    let mut grid_cells_builder = GenericListBuilder::with_capacity(
-        UInt64Builder::with_capacity(
-            cellindexarray.len(), // TODO: multiply with k or k_max-k_min
-        ),
+    let mut grid_cells_builder = H3ListArrayBuilder::with_capacity(
         cellindexarray.len(),
+        cellindexarray.len(), // TODO: multiply with k or k_max-k_min
     );
     let mut grid_distancess_builder = GenericListBuilder::with_capacity(
         UInt32Builder::with_capacity(
@@ -151,9 +145,7 @@ where
                 for (grid_cell, grid_distance) in cell.grid_disk_distances::<Vec<_>>(k).into_iter()
                 {
                     if filter(grid_cell, grid_distance) {
-                        grid_cells_builder
-                            .values()
-                            .append_value(u64::from(grid_cell));
+                        grid_cells_builder.values().append_value(grid_cell);
                         grid_distancess_builder.values().append_value(grid_distance);
                     }
                 }
@@ -167,13 +159,13 @@ where
         grid_distancess_builder.append(is_valid)
     }
 
-    let grid_cells = grid_cells_builder.finish();
+    let grid_cells = grid_cells_builder.finish()?;
     let grid_distances = grid_distancess_builder.finish();
 
     debug_assert_eq!(grid_cells.len(), grid_distances.len());
 
     Ok(GridDiskDistances {
-        cells: genericlistarray_to_h3listarray_unvalidated(grid_cells)?,
+        cells: grid_cells,
         distances: grid_distances,
     })
 }

@@ -1,6 +1,6 @@
 use crate::array::{H3Array, H3IndexArrayValue};
 use crate::error::Error;
-use arrow::array::{Array, UInt64Array};
+use arrow::array::{Array, GenericListBuilder, UInt64Array, UInt64Builder};
 use arrow::array::{GenericListArray, OffsetSizeTrait};
 use arrow::datatypes::DataType;
 use std::marker::PhantomData;
@@ -221,6 +221,64 @@ where
 }
 
  */
+
+pub struct H3ArrayBuilder<'a, IX> {
+    array_builder: &'a mut UInt64Builder,
+    h3index_phantom: PhantomData<IX>,
+}
+
+impl<'a, IX> H3ArrayBuilder<'a, IX>
+where
+    IX: H3IndexArrayValue,
+{
+    #[inline]
+    pub fn append_value(&mut self, value: IX) {
+        self.array_builder.append_value(value.into())
+    }
+
+    pub fn append_many<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = IX>,
+    {
+        iter.into_iter().for_each(|value| self.append_value(value))
+    }
+}
+
+pub struct H3ListArrayBuilder<IX, O: OffsetSizeTrait = i64> {
+    h3index_phantom: PhantomData<IX>,
+    builder: GenericListBuilder<O, UInt64Builder>,
+}
+
+impl<IX, O: OffsetSizeTrait> H3ListArrayBuilder<IX, O>
+where
+    IX: H3IndexArrayValue,
+{
+    pub fn with_capacity(list_capacity: usize, values_capacity: usize) -> Self {
+        let builder = GenericListBuilder::with_capacity(
+            UInt64Builder::with_capacity(values_capacity),
+            list_capacity,
+        );
+        Self {
+            h3index_phantom: Default::default(),
+            builder,
+        }
+    }
+
+    pub fn append(&mut self, is_valid: bool) {
+        self.builder.append(is_valid)
+    }
+
+    pub fn values(&mut self) -> H3ArrayBuilder<'_, IX> {
+        H3ArrayBuilder {
+            array_builder: self.builder.values(),
+            h3index_phantom: self.h3index_phantom,
+        }
+    }
+
+    pub fn finish(mut self) -> Result<H3ListArray<IX, O>, Error> {
+        genericlistarray_to_h3listarray_unvalidated(self.builder.finish())
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -1,4 +1,4 @@
-use arrow::array::{GenericListBuilder, OffsetSizeTrait, UInt64Builder};
+use arrow::array::OffsetSizeTrait;
 use geo_types::*;
 use h3o::geom::{ContainmentMode, PolyfillConfig, ToCells};
 use h3o::{CellIndex, Resolution};
@@ -6,7 +6,7 @@ use h3o::{CellIndex, Resolution};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 use crate::array::list::H3ListArray;
-use crate::array::{genericlistarray_to_h3listarray_unvalidated, CellIndexArray};
+use crate::array::{CellIndexArray, H3ListArrayBuilder};
 use crate::error::Error;
 
 #[derive(Clone, Copy, Debug)]
@@ -225,23 +225,18 @@ pub(crate) fn cell_vecs_to_h3listarray<O: OffsetSizeTrait>(
         .map(|cells| cells.as_ref().map(|v| v.len()).unwrap_or(0))
         .sum();
 
-    let mut builder = GenericListBuilder::with_capacity(
-        UInt64Builder::with_capacity(uint64_capacity),
-        cell_vecs.len(),
-    );
+    let mut builder = H3ListArrayBuilder::with_capacity(cell_vecs.len(), uint64_capacity);
 
     for cells in cell_vecs.into_iter() {
         let is_valid = if let Some(cells) = cells {
-            cells
-                .into_iter()
-                .for_each(|cell| builder.values().append_value(u64::from(cell)));
+            builder.values().append_many(cells);
             true
         } else {
             false
         };
         builder.append(is_valid);
     }
-    genericlistarray_to_h3listarray_unvalidated(builder.finish())
+    builder.finish()
 }
 
 impl<T, O: OffsetSizeTrait> IterToCellListArray<O> for T
@@ -252,20 +247,19 @@ where
         self,
         options: &ToCellsOptions,
     ) -> Result<H3ListArray<CellIndex, O>, Error> {
-        let mut builder =
-            GenericListBuilder::with_capacity(UInt64Builder::new(), self.size_hint().0);
+        let mut builder = H3ListArrayBuilder::with_capacity(self.size_hint().0, self.size_hint().0);
 
         for geom in self {
             if let Some(geom) = geom {
-                geometry_to_cells(&geom, options)?
-                    .into_iter()
-                    .for_each(|cell| builder.values().append_value(u64::from(cell)));
+                builder
+                    .values()
+                    .append_many(geometry_to_cells(&geom, options)?);
                 builder.append(true);
             } else {
                 builder.append(false);
             }
         }
-        genericlistarray_to_h3listarray_unvalidated(builder.finish())
+        builder.finish()
     }
 }
 

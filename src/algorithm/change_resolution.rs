@@ -1,6 +1,5 @@
-use crate::array::{genericlistarray_to_h3listarray_unvalidated, CellIndexArray, H3ListArray};
+use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
 use crate::error::Error;
-use arrow::array::{GenericListBuilder, UInt64Builder};
 use h3o::{CellIndex, Resolution};
 use std::cmp::Ordering;
 use std::iter::repeat;
@@ -73,22 +72,21 @@ impl ChangeResolutionOp for CellIndexArray {
         &self,
         resolution: Resolution,
     ) -> Result<H3ListArray<CellIndex>, Error> {
-        let mut builder = GenericListBuilder::with_capacity(UInt64Builder::new(), self.len());
+        let mut builder = H3ListArrayBuilder::with_capacity(self.len(), self.len());
 
         self.iter().for_each(|cell| match cell {
             Some(cell) => match cell.resolution().cmp(&resolution) {
                 Ordering::Less => {
-                    cell.children(resolution)
-                        .for_each(|child| builder.values().append_value(u64::from(child)));
+                    builder.values().append_many(cell.children(resolution));
                     builder.append(true)
                 }
                 Ordering::Equal => {
-                    builder.values().append_value(u64::from(cell));
+                    builder.values().append_value(cell);
                     builder.append(true)
                 }
                 Ordering::Greater => match cell.parent(resolution) {
                     Some(parent_cell) => {
-                        builder.values().append_value(u64::from(parent_cell));
+                        builder.values().append_value(parent_cell);
                         builder.append(true)
                     }
                     None => builder.append(false),
@@ -98,8 +96,7 @@ impl ChangeResolutionOp for CellIndexArray {
                 builder.append(false);
             }
         });
-
-        genericlistarray_to_h3listarray_unvalidated(builder.finish())
+        builder.finish()
     }
 
     fn change_resolution_paired(
