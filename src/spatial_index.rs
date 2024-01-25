@@ -106,7 +106,7 @@ where
     where
         F: Fn(IX) -> bool,
     {
-        debug_assert_eq!(builder.capacity(), self.array.len());
+        debug_assert_eq!(builder.len(), self.array.len());
 
         let envelope = AABB::from_corners(to_coord(rect.min()), to_coord(rect.max()));
         let locator = self.rtree.locate_in_envelope_intersecting(&envelope);
@@ -168,13 +168,13 @@ where
 
 pub(crate) fn negative_mask(size: usize) -> BooleanBufferBuilder {
     let mut builder = BooleanBufferBuilder::new(size);
-    (0..size).for_each(|pos| builder.set_bit(pos, false));
+    builder.append_n(size, false);
     builder
 }
 
 #[cfg(test)]
 mod tests {
-    use arrow::array::{Array, Datum};
+    use arrow::array::Array;
     use geo_types::{coord, polygon};
     use h3o::{LatLng, Resolution};
 
@@ -220,8 +220,7 @@ mod tests {
         assert!(mask.is_valid(2));
         assert_eq!(mask.value(2), false);
 
-        assert!(mask.is_valid(3));
-        assert_eq!(mask.value(3), false);
+        assert!(!mask.is_valid(3));
     }
 
     #[test]
@@ -246,7 +245,6 @@ mod tests {
         assert!(mask.is_valid(2));
         assert_eq!(mask.value(2), false);
 
-        assert!(mask.is_valid(3));
-        assert_eq!(mask.value(3), false);
+        assert!(!mask.is_valid(3));
     }
 }
