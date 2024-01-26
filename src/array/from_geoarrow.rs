@@ -9,7 +9,7 @@ use crate::error::Error;
 use arrow::array::OffsetSizeTrait;
 use geo_types::Geometry;
 use geoarrow::array::WKBArray;
-use geoarrow::trait_::GeoArrayAccessor;
+use geoarrow::trait_::GeometryArrayAccessor;
 use geoarrow::GeometryArrayTrait;
 use h3o::CellIndex;
 #[cfg(feature = "rayon")]

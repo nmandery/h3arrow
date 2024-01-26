@@ -1,7 +1,12 @@
-use crate::array::to_geo::{ToLineStrings, ToLines, ToPoints, ToPolygons};
+use crate::array::to_geo::{
+    IterLines, IterPoints, IterPolygons, ToLineStrings, ToPoints, ToPolygons,
+};
+use crate::array::{H3Array, H3IndexArrayValue};
 use arrow::array::OffsetSizeTrait;
-use geo_types::Geometry;
-use geoarrow::array::{LineStringArray, PointArray, PolygonArray, WKBArray};
+use geo_types::LineString;
+use geoarrow::array::{
+    LineStringArray, PointArray, PolygonArray, WKBArray, WKBBuilder, WKBCapacity,
+};
 
 pub trait ToGeoArrowPolygons {
     type Error;
@@ -69,49 +74,23 @@ pub trait ToWKBPolygons {
     ) -> Result<WKBArray<O>, Self::Error>;
 }
 
-impl<T> ToWKBPolygons for T
+impl<T> ToWKBPolygons for H3Array<T>
 where
-    T: ToPolygons,
+    Self: IterPolygons,
+    T: H3IndexArrayValue,
 {
-    type Error = T::Error;
+    type Error = <Self as IterPolygons>::Error;
 
     fn to_wkb_polygons<O: OffsetSizeTrait>(
         &self,
         use_degrees: bool,
     ) -> Result<WKBArray<O>, Self::Error> {
-        Ok(WKBArray::from(
-            self.to_polygons(use_degrees)?
-                .into_iter()
-                .map(|v| v.map(Geometry::from))
-                .collect::<Vec<_>>(),
-        ))
-    }
-}
-
-pub trait ToWKBLines {
-    type Error;
-    fn to_wkb_lines<O: OffsetSizeTrait>(
-        &self,
-        use_degrees: bool,
-    ) -> Result<WKBArray<O>, Self::Error>;
-}
-
-impl<T> ToWKBLines for T
-where
-    T: ToLines,
-{
-    type Error = T::Error;
-
-    fn to_wkb_lines<O: OffsetSizeTrait>(
-        &self,
-        use_degrees: bool,
-    ) -> Result<WKBArray<O>, Self::Error> {
-        Ok(WKBArray::from(
-            self.to_lines(use_degrees)?
-                .into_iter()
-                .map(|v| v.map(Geometry::from))
-                .collect::<Vec<_>>(),
-        ))
+        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(self.len(), self.len()));
+        for poly in self.iter_polygons(use_degrees) {
+            let poly = poly.transpose()?;
+            builder.push_polygon(poly.as_ref())
+        }
+        Ok(builder.finish())
     }
 }
 
@@ -123,22 +102,23 @@ pub trait ToWKBLineStrings {
     ) -> Result<WKBArray<O>, Self::Error>;
 }
 
-impl<T> ToWKBLineStrings for T
+impl<T> ToWKBLineStrings for H3Array<T>
 where
-    T: ToLineStrings,
+    Self: IterLines,
+    T: H3IndexArrayValue,
 {
-    type Error = T::Error;
+    type Error = <Self as IterLines>::Error;
 
     fn to_wkb_linestrings<O: OffsetSizeTrait>(
         &self,
         use_degrees: bool,
     ) -> Result<WKBArray<O>, Self::Error> {
-        Ok(WKBArray::from(
-            self.to_linestrings(use_degrees)?
-                .into_iter()
-                .map(|v| v.map(Geometry::from))
-                .collect::<Vec<_>>(),
-        ))
+        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(self.len(), self.len()));
+        for line in self.iter_lines(use_degrees) {
+            let linestring = line.transpose()?.map(LineString::from);
+            builder.push_line_string(linestring.as_ref())
+        }
+        Ok(builder.finish())
     }
 }
 
@@ -150,21 +130,22 @@ pub trait ToWKBPoints {
     ) -> Result<WKBArray<O>, Self::Error>;
 }
 
-impl<T> ToWKBPoints for T
+impl<T> ToWKBPoints for H3Array<T>
 where
-    T: ToPoints,
+    Self: IterPoints,
+    T: H3IndexArrayValue,
 {
-    type Error = T::Error;
+    type Error = <Self as IterPoints>::Error;
 
     fn to_wkb_points<O: OffsetSizeTrait>(
         &self,
         use_degrees: bool,
     ) -> Result<WKBArray<O>, Self::Error> {
-        Ok(WKBArray::from(
-            self.to_points(use_degrees)?
-                .into_iter()
-                .map(|v| v.map(Geometry::from))
-                .collect::<Vec<_>>(),
-        ))
+        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(self.len(), self.len()));
+        for point in self.iter_points(use_degrees) {
+            let point = point.transpose()?;
+            builder.push_point(point.as_ref())
+        }
+        Ok(builder.finish())
     }
 }
