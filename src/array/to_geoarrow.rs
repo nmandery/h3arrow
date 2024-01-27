@@ -2,7 +2,7 @@ use crate::array::to_geo::{
     IterLines, IterPoints, IterPolygons, ToLineStrings, ToPoints, ToPolygons,
 };
 use crate::array::{H3Array, H3IndexArrayValue};
-use arrow::array::OffsetSizeTrait;
+use arrow::array::{Array, OffsetSizeTrait};
 use geo_types::LineString;
 use geoarrow::array::{
     LineStringArray, PointArray, PolygonArray, WKBArray, WKBBuilder, WKBCapacity,
@@ -85,7 +85,31 @@ where
         &self,
         use_degrees: bool,
     ) -> Result<WKBArray<O>, Self::Error> {
-        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(self.len(), self.len()));
+        // just use the first value to estimate the required buffer size. This may be off a bit and require
+        // a re-allocation in case the first element is a pentagon
+        let geometry_wkb_size = if let Some(first_value) = self
+            .iter_polygons(use_degrees)
+            .flat_map(|v| v.transpose().ok().flatten())
+            .next()
+        {
+            let mut cap = WKBCapacity::new_empty();
+            cap.add_polygon(Some(&first_value));
+            cap.buffer_capacity()
+        } else {
+            0
+        };
+
+        // number of non-null geometries
+        let num_non_null = self.primitive_array.len().saturating_sub(
+            self.primitive_array
+                .nulls()
+                .map(|nb| nb.null_count())
+                .unwrap_or(0),
+        );
+        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(
+            num_non_null * geometry_wkb_size,
+            self.len(),
+        ));
         for poly in self.iter_polygons(use_degrees) {
             let poly = poly.transpose()?;
             builder.push_polygon(poly.as_ref())
@@ -113,7 +137,31 @@ where
         &self,
         use_degrees: bool,
     ) -> Result<WKBArray<O>, Self::Error> {
-        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(self.len(), self.len()));
+        // just use the first value to estimate the required buffer size. All geometries have the same number of coordinates
+        let geometry_wkb_size = if let Some(first_value) = self
+            .iter_lines(use_degrees)
+            .flat_map(|v| v.transpose().ok().flatten())
+            .next()
+        {
+            let mut cap = WKBCapacity::new_empty();
+            cap.add_line_string(Some(&LineString::from(first_value)));
+            cap.buffer_capacity()
+        } else {
+            0
+        };
+
+        // number of non-null geometries
+        let num_non_null = self.primitive_array.len().saturating_sub(
+            self.primitive_array
+                .nulls()
+                .map(|nb| nb.null_count())
+                .unwrap_or(0),
+        );
+
+        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(
+            num_non_null * geometry_wkb_size,
+            self.len(),
+        ));
         for line in self.iter_lines(use_degrees) {
             let linestring = line.transpose()?.map(LineString::from);
             builder.push_line_string(linestring.as_ref())
@@ -141,7 +189,31 @@ where
         &self,
         use_degrees: bool,
     ) -> Result<WKBArray<O>, Self::Error> {
-        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(self.len(), self.len()));
+        // just use the first value to estimate the required buffer size
+        let geometry_wkb_size = if self
+            .iter_points(use_degrees)
+            .flat_map(|v| v.transpose().ok().flatten())
+            .next()
+            .is_some()
+        {
+            let mut cap = WKBCapacity::new_empty();
+            cap.add_point(true);
+            cap.buffer_capacity()
+        } else {
+            0
+        };
+
+        // number of non-null geometries
+        let num_non_null = self.primitive_array.len().saturating_sub(
+            self.primitive_array
+                .nulls()
+                .map(|nb| nb.null_count())
+                .unwrap_or(0),
+        );
+        let mut builder = WKBBuilder::with_capacity(WKBCapacity::new(
+            geometry_wkb_size * num_non_null,
+            self.len(),
+        ));
         for point in self.iter_points(use_degrees) {
             let point = point.transpose()?;
             builder.push_point(point.as_ref())
