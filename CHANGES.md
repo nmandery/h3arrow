@@ -11,7 +11,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 * Add ChangeResolutionOp::change_resolution_list.
 * Update geozero to 0.11.
 * Update h3o to 0.5.
-* Migrate from arrow2 to the official apache arrow implementation and aligned naming.
+* Migrate from arrow2 to the official apache arrow implementation and aligned naming. This comes along with many API changes. `geoarrow::ToWKBLines` has been removed.
 
 ## v0.2.0 (2023-08-31)
 * Upgrade h3o from v0.3 to v0.4. Due to the new polyfill modes this lead to API breakages in the `ToCellsOptions` struct.

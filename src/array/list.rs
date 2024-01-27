@@ -65,14 +65,11 @@ where
     }
 }
 
-/*
-impl<IX, O: OffsetSizeTrait> From<H3ListArray<IX>> for GenericListArray<O> {
+impl<IX, O: OffsetSizeTrait> From<H3ListArray<IX, O>> for GenericListArray<O> {
     fn from(value: H3ListArray<IX, O>) -> Self {
         value.list_array
     }
 }
-
- */
 
 pub(crate) fn genericlistarray_to_h3listarray_unvalidated<IX, O: OffsetSizeTrait>(
     value: GenericListArray<O>,
@@ -109,118 +106,6 @@ where
         Ok(instance)
     }
 }
-
-/*
-pub(crate) struct ListArrayBuilder<T: ArrowPrimitiveType, O: OffsetSizeTrait> {
-    values: Vec<T>,
-    offsets: Vec<O>,
-    list_validity: Vec<bool>,
-}
-
-impl<T: ArrowPrimitiveType, O: OffsetSizeTrait> Default for ListArrayBuilder<T, O> {
-    fn default() -> Self {
-        Self::with_capacity(100)
-    }
-}
-
-impl<T: ArrowPrimitiveType, O: OffsetSizeTrait> ListArrayBuilder<T, O> {
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            values: Vec::with_capacity(capacity),
-            offsets: Vec::with_capacity(capacity),
-            list_validity: Vec::with_capacity(capacity),
-        }
-    }
-
-    pub fn push_invalid(&mut self) {
-        self.offsets.push(self.values.len() as i64);
-        self.list_validity.push(false);
-    }
-
-    pub fn push_valid<I>(&mut self, it: I)
-    where
-        I: IntoIterator<Item = T>,
-    {
-        self.offsets.push(self.values.len() as i64);
-        self.values.extend(it);
-        self.list_validity.push(true);
-    }
-
-    pub fn build(mut self) -> Result<GenericListArray<O>, Error> {
-        self.offsets.push(self.values.len() as i64);
-        let validity: Bitmap = MutableBitmap::from_iter(self.list_validity).into();
-        Ok(ListArray::try_new(
-            ListArray::<i64>::default_datatype(DataType::UInt64),
-            self.offsets.try_into()?,
-            PrimitiveArray::from_vec(self.values).to_boxed(),
-            if validity.unset_bits() == 0 {
-                None
-            } else {
-                Some(validity)
-            },
-        )?)
-    }
-}
-
-pub struct H3ListArrayBuilder<IX, O: OffsetSizeTrait = i64> {
-    h3index_phantom: PhantomData<IX>,
-    builder: ListArrayBuilder<u64, O>,
-}
-
-impl<IX, O: OffsetSizeTrait> Default for H3ListArrayBuilder<IX, O>
-where
-    IX: H3IndexArrayValue,
-{
-    fn default() -> Self {
-        Self::with_capacity(100)
-    }
-}
-
-impl<IX, O: OffsetSizeTrait> H3ListArrayBuilder<IX, O>
-where
-    IX: H3IndexArrayValue,
-{
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            h3index_phantom: PhantomData::<IX>,
-            builder: ListArrayBuilder::with_capacity(capacity),
-        }
-    }
-
-    pub fn push_invalid(&mut self) {
-        self.builder.push_invalid();
-    }
-
-    pub fn push_valid<I>(&mut self, it: I)
-    where
-        I: IntoIterator<Item = IX>,
-    {
-        self.builder
-            .push_valid(it.into_iter().map(|index| index.into()));
-    }
-
-    pub fn extend<I1, I2>(&mut self, it: I1)
-    where
-        I1: Iterator<Item = Option<I2>>,
-        I2: IntoIterator<Item = IX>,
-    {
-        for sub_iter in it {
-            match sub_iter {
-                Some(sub_iter) => self.push_valid(sub_iter),
-                None => self.push_invalid(),
-            }
-        }
-    }
-
-    pub fn build(self) -> Result<H3ListArray<IX>, Error> {
-        Ok(H3ListArray {
-            list_array: self.builder.build()?,
-            h3index_phantom: PhantomData::<IX>,
-        })
-    }
-}
-
- */
 
 pub struct H3ArrayBuilder<'a, IX> {
     array_builder: &'a mut UInt64Builder,
@@ -280,10 +165,18 @@ where
     }
 }
 
+impl<IX, O: OffsetSizeTrait> Default for H3ListArrayBuilder<IX, O>
+where
+    IX: H3IndexArrayValue,
+{
+    fn default() -> Self {
+        Self::with_capacity(10, 10)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    /*
-    //use crate::array::H3ListArrayBuilder;
+    use crate::array::H3ListArrayBuilder;
     use h3o::{CellIndex, LatLng, Resolution};
 
     #[test]
@@ -291,10 +184,13 @@ mod tests {
         let cell = LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five);
 
         let mut builder = H3ListArrayBuilder::<CellIndex>::default();
-        builder.push_valid(cell.grid_disk::<Vec<_>>(1));
-        builder.push_invalid();
-        builder.push_valid(cell.grid_disk::<Vec<_>>(2));
-        let list = builder.build().unwrap();
+        builder.values().append_many(cell.grid_disk::<Vec<_>>(1));
+        builder.append(true);
+        builder.append(false);
+        builder.values().append_many(cell.grid_disk::<Vec<_>>(2));
+        builder.append(true);
+
+        let list = builder.finish().unwrap();
 
         /*
         let list = H3ListArray::<CellIndex>::try_from_iter(
@@ -316,6 +212,4 @@ mod tests {
         let cells = list.into_flattened().unwrap();
         assert_eq!(cells.len(), 26);
     }
-
-     */
 }
