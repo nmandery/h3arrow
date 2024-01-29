@@ -80,6 +80,13 @@ impl<IX> H3Array<IX>
 where
     IX: H3IndexArrayValue,
 {
+    pub fn new_null(length: usize) -> Self {
+        Self {
+            h3index_phantom: Default::default(),
+            primitive_array: UInt64Array::new_null(length),
+        }
+    }
+
     pub fn primitive_array(&self) -> &UInt64Array {
         &self.primitive_array
     }

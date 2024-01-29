@@ -1,4 +1,5 @@
 use arrow::array::OffsetSizeTrait;
+use geo::HasDimensions;
 use geo_types::*;
 use h3o::geom::{ContainmentMode, PolyfillConfig, ToCells};
 use h3o::{CellIndex, Resolution};
@@ -297,6 +298,9 @@ pub fn geometry_to_cells(
     geom: &Geometry,
     options: &ToCellsOptions,
 ) -> Result<Vec<CellIndex>, Error> {
+    if geom.is_empty() {
+        return Ok(vec![]);
+    }
     let mut cells: Vec<_> = h3o::geom::Geometry::from_degrees(geom.clone())?
         .to_cells(options.polyfill_config)
         .collect();
