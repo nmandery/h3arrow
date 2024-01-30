@@ -1,3 +1,5 @@
+use arrow::array::OffsetSizeTrait;
+use geo::HasDimensions;
 use geo_types::*;
 use h3o::geom::{ContainmentMode, PolyfillConfig, ToCells};
 use h3o::{CellIndex, Resolution};
@@ -179,70 +181,98 @@ where
     }
 }
 
-pub trait ToCellListArray {
-    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error>;
+pub trait ToCellListArray<O: OffsetSizeTrait> {
+    fn to_celllistarray(
+        &self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error>;
 }
 
-pub(crate) trait IterToCellListArray {
-    fn to_celllistarray(self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error>;
+pub(crate) trait IterToCellListArray<O: OffsetSizeTrait> {
+    fn to_celllistarray(self, options: &ToCellsOptions)
+        -> Result<H3ListArray<CellIndex, O>, Error>;
 }
 
 #[cfg(feature = "rayon")]
-trait ParIterToCellListArray {
+trait ParIterToCellListArray<O: OffsetSizeTrait> {
     fn par_to_celllistarray(
         self,
         options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndex>, Error>;
+    ) -> Result<H3ListArray<CellIndex, O>, Error>;
 }
 
 #[cfg(feature = "rayon")]
-impl<T> ParIterToCellListArray for T
+impl<T, O: OffsetSizeTrait> ParIterToCellListArray<O> for T
 where
     T: ParallelIterator<Item = Option<Geometry>>,
 {
     fn par_to_celllistarray(
         self,
         options: &ToCellsOptions,
-    ) -> Result<H3ListArray<CellIndex>, Error> {
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
         let cell_vecs = self
             .map(|geom| geom.map(|geom| to_cells(geom, options, vec![])).transpose())
             .collect::<Result<Vec<_>, _>>()?;
-        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
-        for cells in cell_vecs.into_iter() {
-            if let Some(cells) = cells {
-                builder.push_valid(cells.into_iter());
-            } else {
-                builder.push_invalid();
-            }
-        }
-        builder.build()
+
+        cell_vecs_to_h3listarray(cell_vecs)
     }
 }
 
-impl<T> IterToCellListArray for T
+pub(crate) fn cell_vecs_to_h3listarray<O: OffsetSizeTrait>(
+    cell_vecs: Vec<Option<Vec<CellIndex>>>,
+) -> Result<H3ListArray<CellIndex, O>, Error> {
+    let uint64_capacity: usize = cell_vecs
+        .iter()
+        .map(|cells| cells.as_ref().map(|v| v.len()).unwrap_or(0))
+        .sum();
+
+    let mut builder = H3ListArrayBuilder::with_capacity(cell_vecs.len(), uint64_capacity);
+
+    for cells in cell_vecs.into_iter() {
+        let is_valid = if let Some(cells) = cells {
+            builder.values().append_many(cells);
+            true
+        } else {
+            false
+        };
+        builder.append(is_valid);
+    }
+    builder.finish()
+}
+
+impl<T, O: OffsetSizeTrait> IterToCellListArray<O> for T
 where
     T: Iterator<Item = Option<Geometry>>,
 {
-    fn to_celllistarray(self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
-        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
+    fn to_celllistarray(
+        self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
+        let mut builder = H3ListArrayBuilder::with_capacity(self.size_hint().0, self.size_hint().0);
 
         for geom in self {
             if let Some(geom) = geom {
-                builder.push_valid(to_cells(geom, options, vec![])?.into_iter());
+                builder
+                    .values()
+                    .append_many(geometry_to_cells(&geom, options)?);
+                builder.append(true);
             } else {
-                builder.push_invalid();
+                builder.append(false);
             }
         }
-        builder.build()
+        builder.finish()
     }
 }
 
 #[cfg(feature = "rayon")]
-impl<T> ToCellListArray for &[T]
+impl<T, O: OffsetSizeTrait> ToCellListArray<O> for &[T]
 where
     T: ToClonedGeometry + Sync,
 {
-    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
+    fn to_celllistarray(
+        &self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
         self.into_par_iter()
             .map(|g| g.to_cloned_geometry())
             .par_to_celllistarray(options)
@@ -250,11 +280,14 @@ where
 }
 
 #[cfg(not(feature = "rayon"))]
-impl<T> ToCellListArray for &[T]
+impl<T, O: OffsetSizeTrait> ToCellListArray<O> for &[T]
 where
     T: ToClonedGeometry,
 {
-    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
+    fn to_celllistarray(
+        &self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
         self.iter()
             .map(|g| g.to_cloned_geometry())
             .to_celllistarray(options)
@@ -265,6 +298,9 @@ pub fn geometry_to_cells(
     geom: &Geometry,
     options: &ToCellsOptions,
 ) -> Result<Vec<CellIndex>, Error> {
+    if geom.is_empty() {
+        return Ok(vec![]);
+    }
     let mut cells: Vec<_> = h3o::geom::Geometry::from_degrees(geom.clone())?
         .to_cells(options.polyfill_config)
         .collect();

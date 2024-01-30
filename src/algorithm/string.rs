@@ -1,6 +1,5 @@
-use arrow2::array::Utf8Array;
-use arrow2::offset::Offsets;
-use arrow2::types::Offset;
+use arrow::array::{Array, GenericStringArray, OffsetSizeTrait};
+use arrow::buffer::OffsetBuffer;
 use std::fmt::Display;
 use std::io::Write;
 use std::str::FromStr;
@@ -91,15 +90,15 @@ fn parse_coordinate_and_resolution(s: &str) -> IResult<&str, (Coord, u8)> {
     Ok((s, (Coord::from((x, y)), r)))
 }
 
-pub trait ToUtf8Array<O: Offset> {
-    fn to_utf8array(&self) -> Result<Utf8Array<O>, Error>;
+pub trait ToGenericStringArray<O: OffsetSizeTrait> {
+    fn to_genericstringarray(&self) -> Result<GenericStringArray<O>, Error>;
 }
 
-impl<O: Offset, IX> ToUtf8Array<O> for H3Array<IX>
+impl<O: OffsetSizeTrait, IX> ToGenericStringArray<O> for H3Array<IX>
 where
     IX: H3IndexArrayValue + Display,
 {
-    fn to_utf8array(&self) -> Result<Utf8Array<O>, Error> {
+    fn to_genericstringarray(&self) -> Result<GenericStringArray<O>, Error> {
         let mut values: Vec<u8> =
             Vec::with_capacity(self.len() * 16 /* assuming 64bit hex values */);
         let mut offsets: Vec<O> = Vec::with_capacity(self.len() + 1);
@@ -113,29 +112,28 @@ where
         }
         values.shrink_to_fit();
 
-        Ok(Utf8Array::<O>::new(
-            Utf8Array::<O>::default_data_type(),
-            Offsets::try_from(offsets)?.into(),
+        Ok(GenericStringArray::<O>::new(
+            OffsetBuffer::new(offsets.into()),
             values.into(),
-            self.primitive_array().validity().cloned(),
+            self.primitive_array().nulls().cloned(),
         ))
     }
 }
 
-impl<IX, O: Offset> TryFrom<H3Array<IX>> for Utf8Array<O>
+impl<IX, O: OffsetSizeTrait> TryFrom<H3Array<IX>> for GenericStringArray<O>
 where
-    H3Array<IX>: ToUtf8Array<O>,
+    H3Array<IX>: ToGenericStringArray<O>,
     IX: H3IndexArrayValue + Display,
 {
     type Error = Error;
 
     fn try_from(value: H3Array<IX>) -> Result<Self, Self::Error> {
-        value.to_utf8array()
+        value.to_genericstringarray()
     }
 }
 
 /// parse H3 indexes from string arrays
-pub trait ParseUtf8Array {
+pub trait ParseGenericStringArray {
     /// parse H3 indexes from string arrays
     ///
     /// Setting `set_failing_to_invalid` to true will trigger setting the validity bitmap according
@@ -147,23 +145,23 @@ pub trait ParseUtf8Array {
     /// * hexadecimal (Example: "8552dc63fffffff")
     /// * numeric integer strings (Example: "600436454824345599")
     /// * strings like "[x], [y], [resolution]" or "[x]; [y]; [resolution]". (Example: "10.2,45.5,5")
-    fn parse_utf8array<O: Offset>(
-        utf8array: &Utf8Array<O>,
+    fn parse_genericstringarray<O: OffsetSizeTrait>(
+        utf8array: &GenericStringArray<O>,
         set_failing_to_invalid: bool,
     ) -> Result<Self, Error>
     where
         Self: Sized;
 }
 
-macro_rules! impl_parse_utf8array {
+macro_rules! impl_parse_genericstringarray {
     ($arr:ty, $conv: expr) => {
-        impl ParseUtf8Array for $arr {
-            fn parse_utf8array<O: Offset>(
-                utf8array: &Utf8Array<O>,
+        impl ParseGenericStringArray for $arr {
+            fn parse_genericstringarray<O: OffsetSizeTrait>(
+                genericstringarray: &GenericStringArray<O>,
                 set_failing_to_invalid: bool,
             ) -> Result<Self, Error> {
                 let h3indexes = if set_failing_to_invalid {
-                    utf8array
+                    genericstringarray
                         .iter()
                         .map(|value| match value {
                             Some(value_str) => match $conv(value_str) {
@@ -174,7 +172,7 @@ macro_rules! impl_parse_utf8array {
                         })
                         .collect::<Result<Vec<_>, Error>>()?
                 } else {
-                    utf8array
+                    genericstringarray
                         .iter()
                         .map(|value| match value {
                             Some(value_str) => match $conv(value_str) {
@@ -191,26 +189,26 @@ macro_rules! impl_parse_utf8array {
     };
 }
 
-impl_parse_utf8array!(VertexIndexArray, parse_vertex);
-impl_parse_utf8array!(DirectedEdgeIndexArray, parse_directededge);
-impl_parse_utf8array!(CellIndexArray, parse_cell);
+impl_parse_genericstringarray!(VertexIndexArray, parse_vertex);
+impl_parse_genericstringarray!(DirectedEdgeIndexArray, parse_directededge);
+impl_parse_genericstringarray!(CellIndexArray, parse_cell);
 
-impl<IX, O: Offset> TryFrom<Utf8Array<O>> for H3Array<IX>
+impl<IX, O: OffsetSizeTrait> TryFrom<GenericStringArray<O>> for H3Array<IX>
 where
-    H3Array<IX>: ParseUtf8Array + Sized,
+    H3Array<IX>: ParseGenericStringArray + Sized,
 {
     type Error = Error;
 
-    fn try_from(value: Utf8Array<O>) -> Result<Self, Self::Error> {
-        Self::parse_utf8array(&value, false)
+    fn try_from(value: GenericStringArray<O>) -> Result<Self, Self::Error> {
+        Self::parse_genericstringarray(&value, false)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::algorithm::{parse_cell, ParseUtf8Array, ToUtf8Array};
+    use crate::algorithm::{parse_cell, ParseGenericStringArray, ToGenericStringArray};
     use crate::array::{CellIndexArray, FromWithValidity};
-    use arrow2::array::Utf8Array;
+    use arrow::array::{Array, GenericStringArray};
     use h3o::{CellIndex, LatLng, Resolution};
 
     #[test]
@@ -236,59 +234,62 @@ mod test {
     fn parse_utf8_array_cells() {
         let cell: CellIndex = 0x89283080ddbffff_u64.try_into().unwrap();
 
-        let utf8_array = Utf8Array::<i32>::from_iter(
+        let stringarray = GenericStringArray::<i32>::from_iter(
             vec![cell.to_string(), u64::from(cell).to_string()]
                 .into_iter()
                 .map(Some),
         );
-        let cell_array = CellIndexArray::parse_utf8array(&utf8_array, false).unwrap();
-        assert_eq!(cell_array.len(), utf8_array.len());
+        let cell_array = CellIndexArray::parse_genericstringarray(&stringarray, false).unwrap();
+        assert_eq!(cell_array.len(), stringarray.len());
         assert!(cell_array.iter().all(|v| v == Some(cell)))
     }
 
     #[test]
     fn parse_utf8_array_cells_invalid_fail() {
-        let utf8_array = Utf8Array::<i32>::from_iter(vec![Some("invalid".to_string())].into_iter());
-        assert!(CellIndexArray::parse_utf8array(&utf8_array, false).is_err());
+        let stringarray =
+            GenericStringArray::<i32>::from_iter(vec![Some("invalid".to_string())].into_iter());
+        assert!(CellIndexArray::parse_genericstringarray(&stringarray, false).is_err());
     }
 
     #[test]
     fn parse_utf8_array_cells_invalid_to_invalid() {
-        let utf8_array = Utf8Array::<i32>::from_iter(vec![Some("invalid".to_string())].into_iter());
-        let cell_array = CellIndexArray::parse_utf8array(&utf8_array, true).unwrap();
+        let utf8_array =
+            GenericStringArray::<i32>::from_iter(vec![Some("invalid".to_string())].into_iter());
+        let cell_array = CellIndexArray::parse_genericstringarray(&utf8_array, true).unwrap();
         assert_eq!(1, cell_array.len());
         assert!(cell_array.iter().all(|v| v.is_none()))
     }
 
     #[test]
-    fn to_utf8array() {
+    fn to_stringarray() {
         let cellindexarray =
             CellIndexArray::from_with_validity(vec![Some(0x89283080ddbffff_u64), None]);
 
-        let utf8array: Utf8Array<i64> = cellindexarray.to_utf8array().unwrap();
+        let stringarray: GenericStringArray<i64> = cellindexarray.to_genericstringarray().unwrap();
 
-        assert_eq!(cellindexarray.len(), utf8array.len());
-        assert_eq!(utf8array.get(0), Some("89283080ddbffff"));
-        assert_eq!(utf8array.get(1), None);
+        assert_eq!(cellindexarray.len(), stringarray.len());
+        assert_eq!(stringarray.is_valid(0), true);
+        assert_eq!(stringarray.value(0), "89283080ddbffff");
+        assert_eq!(stringarray.is_valid(1), false);
     }
 
     #[test]
-    fn to_utf8array_roundtrip() {
+    fn to_stringarray_roundtrip() {
         let arr: CellIndexArray = vec![
             LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five),
             LatLng::new(12.3, 0.5).unwrap().to_cell(Resolution::Nine),
         ]
         .into();
 
-        let utf8: Utf8Array<i32> = arr.clone().try_into().unwrap();
-        assert_eq!(utf8.len(), arr.len());
+        let stringarray: GenericStringArray<i32> = arr.clone().try_into().unwrap();
+        assert_eq!(stringarray.len(), arr.len());
 
         assert_eq!(
-            utf8.iter().flatten().collect::<Vec<_>>(),
+            stringarray.iter().flatten().collect::<Vec<_>>(),
             vec!["855968a3fffffff", "89599da10d3ffff"]
         );
 
-        let arr2: CellIndexArray = utf8.try_into().unwrap();
+        let arr2: CellIndexArray = stringarray.try_into().unwrap();
         assert!(arr == arr2);
     }
 }

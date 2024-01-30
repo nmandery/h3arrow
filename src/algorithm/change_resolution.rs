@@ -2,7 +2,7 @@ use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
 use crate::error::Error;
 use h3o::{CellIndex, Resolution};
 use std::cmp::Ordering;
-use std::iter::{once, repeat};
+use std::iter::repeat;
 
 pub struct ChangedResolutionPair<T> {
     /// values before the resolution change
@@ -65,38 +65,38 @@ impl ChangeResolutionOp for CellIndexArray {
             .flatten()
             .for_each(|cell| extend_with_cell(&mut out_vec, cell, resolution));
 
-        Ok(out_vec.try_into().unwrap())
+        Ok(out_vec.into())
     }
 
     fn change_resolution_list(
         &self,
         resolution: Resolution,
     ) -> Result<H3ListArray<CellIndex>, Error> {
-        let mut builder = H3ListArrayBuilder::<CellIndex>::with_capacity(self.len());
+        let mut builder = H3ListArrayBuilder::with_capacity(self.len(), self.len());
 
         self.iter().for_each(|cell| match cell {
             Some(cell) => match cell.resolution().cmp(&resolution) {
                 Ordering::Less => {
-                    builder.push_valid(cell.children(resolution));
+                    builder.values().append_many(cell.children(resolution));
+                    builder.append(true)
                 }
                 Ordering::Equal => {
-                    builder.push_valid(once(cell));
+                    builder.values().append_value(cell);
+                    builder.append(true)
                 }
                 Ordering::Greater => match cell.parent(resolution) {
                     Some(parent_cell) => {
-                        builder.push_valid(once(parent_cell));
+                        builder.values().append_value(parent_cell);
+                        builder.append(true)
                     }
-                    None => {
-                        builder.push_invalid();
-                    }
+                    None => builder.append(false),
                 },
             },
             None => {
-                builder.push_invalid();
+                builder.append(false);
             }
         });
-
-        builder.build()
+        builder.finish()
     }
 
     fn change_resolution_paired(
@@ -113,8 +113,8 @@ impl ChangeResolutionOp for CellIndexArray {
         });
 
         Ok(ChangedResolutionPair {
-            before: before_vec.try_into().unwrap(),
-            after: after_vec.try_into().unwrap(),
+            before: before_vec.into(),
+            after: after_vec.into(),
         })
     }
 }
@@ -124,7 +124,7 @@ mod test {
     use crate::algorithm::ChangeResolutionOp;
     use crate::array::CellIndexArray;
     use ahash::HashSet;
-    use arrow2::bitmap::Bitmap;
+    use arrow::array::Array;
     use h3o::{LatLng, Resolution};
 
     #[test]
@@ -143,10 +143,9 @@ mod test {
         assert_eq!(
             arr_res_six
                 .primitive_array()
-                .validity()
-                .cloned()
-                .unwrap_or_else(Bitmap::new)
-                .unset_bits(),
+                .nulls()
+                .map(|nullbuf| nullbuf.null_count())
+                .unwrap_or(0),
             0
         )
     }

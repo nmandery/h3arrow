@@ -25,10 +25,10 @@ pub enum Error {
     OutlinerError(#[from] h3o::error::OutlinerError),
 
     #[error(transparent)]
-    Arrow2(#[from] arrow2::error::Error),
+    Arrow2(#[from] arrow::error::ArrowError),
 
-    #[error("not a PrimitiveArray<u64>")]
-    NotAPrimitiveArrayU64,
+    #[error("not a UintArray")]
+    NotAUint64Array,
 
     #[error("non-parsable CellIndex")]
     NonParsableCellIndex,

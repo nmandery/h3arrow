@@ -1,22 +1,21 @@
 use crate::array::{H3Array, H3IndexArrayValue};
 use crate::error::Error;
-use arrow2::array::{Array, ListArray, PrimitiveArray};
-use arrow2::bitmap::{Bitmap, MutableBitmap};
-use arrow2::datatypes::DataType;
-use arrow2::types::NativeType;
+use arrow::array::{Array, GenericListBuilder, UInt64Array, UInt64Builder};
+use arrow::array::{GenericListArray, OffsetSizeTrait};
+use arrow::datatypes::DataType;
 use std::marker::PhantomData;
 
-pub struct H3ListArray<IX> {
-    pub(crate) list_array: ListArray<i64>,
+pub struct H3ListArray<IX, O: OffsetSizeTrait = i64> {
+    pub(crate) list_array: GenericListArray<O>,
     pub(crate) h3index_phantom: PhantomData<IX>,
 }
 
-impl<IX> H3ListArray<IX>
+impl<IX, O: OffsetSizeTrait> H3ListArray<IX, O>
 where
     IX: H3IndexArrayValue,
-    H3Array<IX>: TryFrom<PrimitiveArray<u64>, Error = Error>,
+    H3Array<IX>: TryFrom<UInt64Array, Error = Error>,
 {
-    pub fn listarray(&self) -> &ListArray<i64> {
+    pub fn listarray(&self) -> &GenericListArray<O> {
         &self.list_array
     }
 
@@ -33,9 +32,9 @@ where
             opt.map(|array| {
                 array
                     .as_any()
-                    .downcast_ref::<PrimitiveArray<u64>>()
+                    .downcast_ref::<UInt64Array>()
                     // TODO: this should already be validated. unwrap/expect?
-                    .ok_or(Error::NotAPrimitiveArrayU64)
+                    .ok_or(Error::NotAUint64Array)
                     .and_then(|pa| pa.clone().try_into())
             })
         })
@@ -46,33 +45,61 @@ where
         self.list_array
             .values()
             .as_any()
-            .downcast_ref::<PrimitiveArray<u64>>()
+            .downcast_ref::<UInt64Array>()
             // TODO: this should already be validated. unwrap/expect?
-            .ok_or(Error::NotAPrimitiveArrayU64)
+            .ok_or(Error::NotAUint64Array)
             .and_then(|pa| pa.clone().try_into())
+    }
+
+    pub(crate) fn from_genericlistarray_unvalidated(
+        value: GenericListArray<O>,
+    ) -> Result<H3ListArray<IX, O>, Error> {
+        if value.data_type() != &DataType::UInt64 {
+            return Err(Error::NotAUint64Array);
+        }
+
+        Ok(Self {
+            list_array: value,
+            h3index_phantom: PhantomData::<IX>,
+        })
     }
 }
 
-impl<IX> From<H3ListArray<IX>> for ListArray<i64> {
-    fn from(value: H3ListArray<IX>) -> Self {
+impl<IX, O: OffsetSizeTrait> From<H3ListArray<IX, O>> for GenericListArray<O> {
+    fn from(value: H3ListArray<IX, O>) -> Self {
         value.list_array
     }
 }
 
-impl<IX> TryFrom<ListArray<i64>> for H3ListArray<IX>
+pub(crate) fn genericlistarray_to_h3listarray_unvalidated<IX, O: OffsetSizeTrait>(
+    value: GenericListArray<O>,
+) -> Result<H3ListArray<IX, O>, Error> {
+    let nested_datatype = match value.data_type() {
+        DataType::List(field_ref) => field_ref.data_type().clone(),
+        DataType::LargeList(field_ref) => field_ref.data_type().clone(),
+        _ => return Err(Error::NotAUint64Array),
+    };
+    if !nested_datatype.equals_datatype(&DataType::UInt64) {
+        return Err(Error::NotAUint64Array);
+    }
+
+    Ok(H3ListArray {
+        list_array: value,
+        h3index_phantom: PhantomData::<IX>,
+    })
+}
+
+impl<IX, O: OffsetSizeTrait> TryFrom<GenericListArray<O>> for H3ListArray<IX, O>
 where
     IX: H3IndexArrayValue,
-    H3Array<IX>: TryFrom<PrimitiveArray<u64>, Error = Error>,
+    H3Array<IX>: TryFrom<UInt64Array, Error = Error>,
 {
     type Error = Error;
 
-    fn try_from(value: ListArray<i64>) -> Result<Self, Self::Error> {
-        let instance = Self {
-            list_array: value,
-            h3index_phantom: PhantomData::<IX>,
-        };
+    fn try_from(value: GenericListArray<O>) -> Result<Self, Self::Error> {
+        let instance = Self::from_genericlistarray_unvalidated(value)?;
 
-        // validate
+        // validate all values
         for a in instance.iter_arrays().flatten() {
             let _ = a?;
         }
@@ -80,112 +107,70 @@ where
     }
 }
 
-pub(crate) struct ListArrayBuilder<T: NativeType> {
-    values: Vec<T>,
-    offsets: Vec<i64>,
-    list_validity: Vec<bool>,
-}
-
-impl<T: NativeType> Default for ListArrayBuilder<T> {
-    fn default() -> Self {
-        Self::with_capacity(100)
-    }
-}
-
-impl<T: NativeType> ListArrayBuilder<T> {
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            values: Vec::with_capacity(capacity),
-            offsets: Vec::with_capacity(capacity),
-            list_validity: Vec::with_capacity(capacity),
-        }
-    }
-
-    pub fn push_invalid(&mut self) {
-        self.offsets.push(self.values.len() as i64);
-        self.list_validity.push(false);
-    }
-
-    pub fn push_valid<I>(&mut self, it: I)
-    where
-        I: IntoIterator<Item = T>,
-    {
-        self.offsets.push(self.values.len() as i64);
-        self.values.extend(it);
-        self.list_validity.push(true);
-    }
-
-    pub fn build(mut self) -> Result<ListArray<i64>, Error> {
-        self.offsets.push(self.values.len() as i64);
-        let validity: Bitmap = MutableBitmap::from_iter(self.list_validity).into();
-        Ok(ListArray::try_new(
-            ListArray::<i64>::default_datatype(DataType::UInt64),
-            self.offsets.try_into()?,
-            PrimitiveArray::from_vec(self.values).to_boxed(),
-            if validity.unset_bits() == 0 {
-                None
-            } else {
-                Some(validity)
-            },
-        )?)
-    }
-}
-
-pub struct H3ListArrayBuilder<IX> {
+pub struct H3ArrayBuilder<'a, IX> {
+    array_builder: &'a mut UInt64Builder,
     h3index_phantom: PhantomData<IX>,
-    builder: ListArrayBuilder<u64>,
 }
 
-impl<IX> Default for H3ListArrayBuilder<IX>
+impl<'a, IX> H3ArrayBuilder<'a, IX>
 where
     IX: H3IndexArrayValue,
 {
-    fn default() -> Self {
-        Self::with_capacity(100)
-    }
-}
-
-impl<IX> H3ListArrayBuilder<IX>
-where
-    IX: H3IndexArrayValue,
-{
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            h3index_phantom: PhantomData::<IX>,
-            builder: ListArrayBuilder::with_capacity(capacity),
-        }
+    #[inline]
+    pub fn append_value(&mut self, value: IX) {
+        self.array_builder.append_value(value.into())
     }
 
-    pub fn push_invalid(&mut self) {
-        self.builder.push_invalid();
-    }
-
-    pub fn push_valid<I>(&mut self, it: I)
+    pub fn append_many<I>(&mut self, iter: I)
     where
         I: IntoIterator<Item = IX>,
     {
-        self.builder
-            .push_valid(it.into_iter().map(|index| index.into()));
+        iter.into_iter().for_each(|value| self.append_value(value))
     }
+}
 
-    pub fn extend<I1, I2>(&mut self, it: I1)
-    where
-        I1: Iterator<Item = Option<I2>>,
-        I2: IntoIterator<Item = IX>,
-    {
-        for sub_iter in it {
-            match sub_iter {
-                Some(sub_iter) => self.push_valid(sub_iter),
-                None => self.push_invalid(),
-            }
+pub struct H3ListArrayBuilder<IX, O: OffsetSizeTrait = i64> {
+    h3index_phantom: PhantomData<IX>,
+    builder: GenericListBuilder<O, UInt64Builder>,
+}
+
+impl<IX, O: OffsetSizeTrait> H3ListArrayBuilder<IX, O>
+where
+    IX: H3IndexArrayValue,
+{
+    pub fn with_capacity(list_capacity: usize, values_capacity: usize) -> Self {
+        let builder = GenericListBuilder::with_capacity(
+            UInt64Builder::with_capacity(values_capacity),
+            list_capacity,
+        );
+        Self {
+            h3index_phantom: Default::default(),
+            builder,
         }
     }
 
-    pub fn build(self) -> Result<H3ListArray<IX>, Error> {
-        Ok(H3ListArray {
-            list_array: self.builder.build()?,
-            h3index_phantom: PhantomData::<IX>,
-        })
+    pub fn append(&mut self, is_valid: bool) {
+        self.builder.append(is_valid)
+    }
+
+    pub fn values(&mut self) -> H3ArrayBuilder<'_, IX> {
+        H3ArrayBuilder {
+            array_builder: self.builder.values(),
+            h3index_phantom: self.h3index_phantom,
+        }
+    }
+
+    pub fn finish(mut self) -> Result<H3ListArray<IX, O>, Error> {
+        genericlistarray_to_h3listarray_unvalidated(self.builder.finish())
+    }
+}
+
+impl<IX, O: OffsetSizeTrait> Default for H3ListArrayBuilder<IX, O>
+where
+    IX: H3IndexArrayValue,
+{
+    fn default() -> Self {
+        Self::with_capacity(10, 10)
     }
 }
 
@@ -199,10 +184,13 @@ mod tests {
         let cell = LatLng::new(23.4, 12.4).unwrap().to_cell(Resolution::Five);
 
         let mut builder = H3ListArrayBuilder::<CellIndex>::default();
-        builder.push_valid(cell.grid_disk::<Vec<_>>(1));
-        builder.push_invalid();
-        builder.push_valid(cell.grid_disk::<Vec<_>>(2));
-        let list = builder.build().unwrap();
+        builder.values().append_many(cell.grid_disk::<Vec<_>>(1));
+        builder.append(true);
+        builder.append(false);
+        builder.values().append_many(cell.grid_disk::<Vec<_>>(2));
+        builder.append(true);
+
+        let list = builder.finish().unwrap();
 
         /*
         let list = H3ListArray::<CellIndex>::try_from_iter(

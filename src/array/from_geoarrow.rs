@@ -1,23 +1,47 @@
 use super::from_geo::{
-    IterToCellIndexArray, IterToCellListArray, ToCellIndexArray, ToCellListArray, ToCellsOptions,
+    cell_vecs_to_h3listarray, IterToCellIndexArray, IterToCellListArray, ToCellIndexArray,
+    ToCellListArray, ToCellsOptions,
 };
 use crate::algorithm::CompactOp;
 use crate::array::from_geo::geometry_to_cells;
-use crate::array::{CellIndexArray, H3ListArray, H3ListArrayBuilder};
+use crate::array::{CellIndexArray, H3ListArray};
 use crate::error::Error;
+use arrow::array::OffsetSizeTrait;
 use geo_types::Geometry;
 use geoarrow::array::WKBArray;
+use geoarrow::trait_::GeometryArrayAccessor;
 use geoarrow::GeometryArrayTrait;
-use geozero::ToGeo;
 use h3o::CellIndex;
 #[cfg(feature = "rayon")]
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-macro_rules! impl_from_geoarrow {
-    ($($array_type:ty),*) => {
-        $(
-        impl ToCellListArray for $array_type {
-            fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
+macro_rules! impl_to_cells {
+    ($array_type:ty, $offset:tt) => {
+        impl<$offset: OffsetSizeTrait> ToCellListArray<$offset> for $array_type {
+            fn to_celllistarray(
+                &self,
+                options: &ToCellsOptions,
+            ) -> Result<H3ListArray<CellIndex, $offset>, Error> {
+                self.iter_geo()
+                    .map(|v| v.map(Geometry::from))
+                    .to_celllistarray(options)
+            }
+        }
+
+        impl<$offset: OffsetSizeTrait> ToCellIndexArray for $array_type {
+            fn to_cellindexarray(&self, options: &ToCellsOptions) -> Result<CellIndexArray, Error> {
+                self.iter_geo()
+                    .map(|v| v.map(Geometry::from))
+                    .to_cellindexarray(options)
+            }
+        }
+    };
+    ($array_type:ty) => {
+        impl<O: OffsetSizeTrait> ToCellListArray<O> for $array_type {
+            fn to_celllistarray(
+                &self,
+                options: &ToCellsOptions,
+            ) -> Result<H3ListArray<CellIndex, O>, Error> {
                 self.iter_geo()
                     .map(|v| v.map(Geometry::from))
                     .to_celllistarray(options)
@@ -31,55 +55,40 @@ macro_rules! impl_from_geoarrow {
                     .to_cellindexarray(options)
             }
         }
-
-        )*
     };
 }
 
-impl_from_geoarrow!(
-    geoarrow::array::LineStringArray,
-    geoarrow::array::MultiLineStringArray,
-    geoarrow::array::MultiPointArray,
-    geoarrow::array::MultiPolygonArray,
-    geoarrow::array::PointArray,
-    geoarrow::array::PolygonArray
-);
+impl_to_cells!(geoarrow::array::LineStringArray<O>, O);
+impl_to_cells!(geoarrow::array::MultiLineStringArray<O>, O);
+impl_to_cells!(geoarrow::array::MultiPointArray<O>, O);
+impl_to_cells!(geoarrow::array::MultiPolygonArray<O>, O);
+impl_to_cells!(geoarrow::array::PointArray);
+impl_to_cells!(geoarrow::array::PolygonArray<O>, O);
 
-impl ToCellListArray for WKBArray {
-    fn to_celllistarray(&self, options: &ToCellsOptions) -> Result<H3ListArray<CellIndex>, Error> {
+impl<O: OffsetSizeTrait> ToCellListArray<O> for WKBArray<O> {
+    fn to_celllistarray(
+        &self,
+        options: &ToCellsOptions,
+    ) -> Result<H3ListArray<CellIndex, O>, Error> {
         #[cfg(not(feature = "rayon"))]
-        let pos_iter = (0..self.len()).into_iter();
+        let pos_iter = 0..self.len();
 
         #[cfg(feature = "rayon")]
         let pos_iter = (0..self.len()).into_par_iter();
 
         let cell_vecs = pos_iter
             .map(|pos| {
-                self.get(pos)
-                    .map(|wkb| {
-                        // Geoarrow currently internally only unwraps the parsed geometry
-                        match geozero::wkb::Wkb(wkb.arr.value(wkb.geom_index).to_vec()).to_geo() {
-                            Ok(geom) => geometry_to_cells(&geom, options),
-                            Err(_) => Err(Error::InvalidWKB),
-                        }
-                    })
+                self.get_as_geo(pos)
+                    .map(|geom| geometry_to_cells(&geom, options))
                     .transpose()
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut builder = H3ListArrayBuilder::<CellIndex>::default();
-        for cells in cell_vecs.into_iter() {
-            if let Some(cells) = cells {
-                builder.push_valid(cells.into_iter())
-            } else {
-                builder.push_invalid()
-            }
-        }
-        builder.build()
+        cell_vecs_to_h3listarray(cell_vecs)
     }
 }
 
-impl ToCellIndexArray for WKBArray {
+impl<O: OffsetSizeTrait> ToCellIndexArray for WKBArray<O> {
     fn to_cellindexarray(&self, options: &ToCellsOptions) -> Result<CellIndexArray, Error> {
         let cellindexarray = self.to_celllistarray(options)?.into_flattened()?;
 

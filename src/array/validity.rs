@@ -1,4 +1,4 @@
-use arrow2::array::PrimitiveArray;
+use arrow::array::UInt64Array;
 
 /// Conversion corresponding to `From` with the difference that the validity mask
 /// is set accordingly to the validity to the contained values.
@@ -30,11 +30,11 @@ where
     }
 }
 
-impl<T> FromWithValidity<PrimitiveArray<u64>> for T
+impl<T> FromWithValidity<UInt64Array> for T
 where
     T: FromIteratorWithValidity<Option<u64>>,
 {
-    fn from_with_validity(value: PrimitiveArray<u64>) -> Self {
-        Self::from_iter_with_validity(value.iter().map(|v| v.copied()))
+    fn from_with_validity(value: UInt64Array) -> Self {
+        Self::from_iter_with_validity(value.iter())
     }
 }
