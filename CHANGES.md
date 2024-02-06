@@ -7,6 +7,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
 ## Unreleased (YYYY-MM-DD TBD)
+
+## v0.3.0 (2024-02-06)
 * Extend documentation on ParseUtf8Array::parse_utf8array.
 * Add ChangeResolutionOp::change_resolution_list.
 * Update geozero to 0.11.
