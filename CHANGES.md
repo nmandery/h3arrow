@@ -12,6 +12,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 * Update h3o to 0.6.
 * Upgrade geo to 0.28
 * Upgrade rstar to 0.12
+* Upgrade geozero to 0.12
 
 ## v0.3.0 (2024-02-06)
 * Extend documentation on ParseUtf8Array::parse_utf8array.
