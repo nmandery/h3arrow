@@ -7,6 +7,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
 ## Unreleased (YYYY-MM-DD TBD)
+
+## v0.4.0 (2024-03-01)
 * Update h3o to 0.6.
 * Upgrade geo to 0.28
 * Upgrade rstar to 0.12
